@@ -1,11 +1,16 @@
 package com.neu.finalproject.meskot.model;
 
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
+
 import java.time.LocalDateTime;
 import java.util.List;
 
 @Entity
 @Table(name = "movie_metadata")
+@Setter
+@Getter
 public class MovieMetadata {
 
     @Id
@@ -21,6 +26,7 @@ public class MovieMetadata {
     private Double duration;
     private Integer bitrate;
     private LocalDateTime uploadDate = LocalDateTime.now();
+    private Long sizeInBytes;
 
     @ManyToOne
     @JoinColumn(name = "movie_id")
