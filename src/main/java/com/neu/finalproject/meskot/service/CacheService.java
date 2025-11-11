@@ -2,6 +2,7 @@ package com.neu.finalproject.meskot.service;
 
 import com.neu.finalproject.meskot.model.CacheEntry;
 import com.neu.finalproject.meskot.repository.CacheEntryRepository;
+import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -9,7 +10,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
+@Service
 public class CacheService {
+
 
     private final CacheEntryRepository cacheEntryRepository;
 

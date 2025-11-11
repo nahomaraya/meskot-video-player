@@ -3,6 +3,7 @@ package com.neu.finalproject.meskot.controller;
 
 import com.neu.finalproject.meskot.model.Movie;
 import com.neu.finalproject.meskot.service.MovieService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -16,14 +17,35 @@ import java.io.File;
 
 @RestController
 @RequestMapping("/api/upload")
+@RequiredArgsConstructor
+
+
 public class Controller {
 
-    @Autowired
-    private MovieService movieService;
+    static class  UploadVideoRequest {
+        @Schema(type = "string", format = "binary", description = "Video file to upload")
+        public MultipartFile file;
+
+        @Schema(defaultValue = "Sample Video", description = "Title of the video")
+        public String title;
+
+        @Schema(defaultValue = "720p", description = "Resolution of the video")
+        public String resolution;
+    }
+    private final MovieService movieService;
 
     @PostMapping
-    @Operation(summary = "Upload a video", description = "Uploads a video file with title and resolution")
-
+    @Operation(
+            summary = "Upload a video",
+            description = "Uploads a video file with title and resolution",
+            requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    required = true,
+                    content = @Content(
+                            mediaType = "multipart/form-data",
+                            schema = @Schema(implementation = UploadVideoRequest.class)
+                    )
+            )
+    )
     public String uploadVideo(
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     description = "Video file to upload",

@@ -5,6 +5,7 @@ import com.neu.finalproject.meskot.model.MovieMetadata;
 import com.neu.finalproject.meskot.repository.MovieMetadataRepository;
 import com.neu.finalproject.meskot.repository.MovieRepository;
 import com.neu.finalproject.meskot.service.impl.MovieServiceImpl;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -14,21 +15,23 @@ import java.util.List;
 import java.util.Optional;
 
 @Service
+@RequiredArgsConstructor
 public class MovieService implements MovieServiceImpl {
 
     @Autowired
     private MovieRepository movieRepository;
+    @Autowired
     private MovieMetadataRepository movieMetadataRepository;
 
-    private EncodingService encodingService;
+    private final EncodingService encodingService;
 
-    private CompressionService compressionService;
+    private final CompressionService compressionService;
 
-    private StorageService storageService;
+    private final StorageService storageService;
 
-    private LocalStorageService localStorageService;
+    private final LocalStorageService localStorageService;
 
-    private CacheService cacheService;
+    private final CacheService cacheService;
 
     @Override
     public Movie saveMovie(Movie movie) {

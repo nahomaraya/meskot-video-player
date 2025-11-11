@@ -5,12 +5,14 @@ import org.bytedeco.ffmpeg.global.avcodec;
 import org.bytedeco.ffmpeg.global.avformat;
 import org.bytedeco.ffmpeg.global.avutil;
 import org.bytedeco.javacv.*;
+import org.springframework.stereotype.Service;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
+@Service
 public class EncodingService {
 
     @Value("${app.ffmpeg.path:ffmpeg}")

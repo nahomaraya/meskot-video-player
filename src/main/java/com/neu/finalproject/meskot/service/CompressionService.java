@@ -2,9 +2,11 @@ package com.neu.finalproject.meskot.service;
 
 import com.github.luben.zstd.ZstdInputStream;
 import com.github.luben.zstd.ZstdOutputStream;
+import org.springframework.stereotype.Service;
 
 import java.io.*;
 
+@Service
 public class CompressionService {
 
     public File compress(File input) throws IOException {
