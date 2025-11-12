@@ -15,10 +15,10 @@ import uk.co.caprica.vlcj.player.component.EmbeddedMediaPlayerComponent;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
+import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.util.stream.Collectors;
 import java.util.List;
 public class VideoPlayerUI extends JFrame {
@@ -36,6 +36,10 @@ public class VideoPlayerUI extends JFrame {
     private final JButton pauseButton;
     private final JButton stopButton;
     private List<MovieDto> movieList;
+    private JTextField searchField;
+    private JButton searchButton;
+    private JButton downloadButton;
+
 
     public VideoPlayerUI() {
         super("Meskot Video Player");
@@ -63,6 +67,20 @@ public class VideoPlayerUI extends JFrame {
 
         mediaPlayerComponent = new EmbeddedMediaPlayerComponent();
         add(mediaPlayerComponent, BorderLayout.CENTER);
+
+
+        JPanel topPanel = new JPanel(new FlowLayout());
+        searchField = new JTextField(20);
+        searchButton = new JButton("Search");
+        downloadButton = new JButton("Download");
+
+        topPanel.add(new JLabel("Search:"));
+        topPanel.add(searchField);
+        topPanel.add(searchButton);
+        topPanel.add(downloadButton);
+
+        add(topPanel, BorderLayout.NORTH);
+
 //        // Button action
 //        playButton.addActionListener(e -> playVideo());
 
@@ -84,17 +102,31 @@ public class VideoPlayerUI extends JFrame {
         playButton.addActionListener(this::onPlay);
         pauseButton.addActionListener(e -> mediaPlayerComponent.mediaPlayer().controls().pause());
         stopButton.addActionListener(e -> mediaPlayerComponent.mediaPlayer().controls().stop());
+        searchButton.addActionListener(e -> {
+            String query = searchField.getText().trim();
+            if (!query.isEmpty()) {
+                loadMoviesFromApi(query);
+            } else {
+                loadMoviesFromApi(null);
+            }
+        });
 
-        loadMoviesFromApi();
-
+        downloadButton.addActionListener(e -> {
+            int index = movieDropdown.getSelectedIndex();
+            if (index >= 0 && index < movieList.size()) {
+                MovieDto selected = movieList.get(index);
+                downloadMovie(selected.getId());
+            }
+        });
 
         // Show window
         setVisible(true);
     }
 
-    private void loadMoviesFromApi() {
+    private void loadMoviesFromApi(String query) {
         try {
-            URL url = new URL("http://localhost:8080/api/movies");
+            String apiUrl = "http://localhost:8080/api/movies" + (query != null ? "/search?query=" + URLEncoder.encode(query, "UTF-8") : "");
+            URL url = new URL(apiUrl);
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("GET");
             conn.connect();
@@ -104,7 +136,6 @@ public class VideoPlayerUI extends JFrame {
                 ObjectMapper mapper = new ObjectMapper();
                 mapper.registerModule(new JavaTimeModule());
                 mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-                mapper.disable(DeserializationFeature.ADJUST_DATES_TO_CONTEXT_TIME_ZONE);
 
                 movieList = mapper.readValue(json, new TypeReference<List<MovieDto>>() {});
                 movieDropdown.removeAllItems();
@@ -113,6 +144,42 @@ public class VideoPlayerUI extends JFrame {
 
         } catch (Exception e) {
             JOptionPane.showMessageDialog(this, "Failed to load movies: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    private void downloadMovie(Long movieId) {
+        try {
+            URL url = new URL("http://localhost:8080/api/movies/" + movieId + "/download");
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+
+            if (conn.getResponseCode() == 200) {
+                String disposition = conn.getHeaderField("Content-Disposition");
+                String fileName = "downloaded_video.mp4";
+                if (disposition != null && disposition.contains("filename=")) {
+                    fileName = disposition.split("filename=")[1].replace("\"", "");
+                }
+
+                JFileChooser chooser = new JFileChooser();
+                chooser.setSelectedFile(new File(fileName));
+                if (chooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+                    try (InputStream in = conn.getInputStream();
+                         FileOutputStream out = new FileOutputStream(chooser.getSelectedFile())) {
+                        byte[] buffer = new byte[8192];
+                        int bytesRead;
+                        while ((bytesRead = in.read(buffer)) != -1) {
+                            out.write(buffer, 0, bytesRead);
+                        }
+                    }
+                    JOptionPane.showMessageDialog(this, "Downloaded successfully!");
+                }
+            } else {
+                JOptionPane.showMessageDialog(this, "Failed to download file: " + conn.getResponseMessage());
+            }
+
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Error downloading file: " + e.getMessage());
             e.printStackTrace();
         }
     }

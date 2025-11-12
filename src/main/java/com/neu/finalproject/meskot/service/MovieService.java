@@ -1,5 +1,6 @@
 package com.neu.finalproject.meskot.service;
 
+import com.neu.finalproject.meskot.dto.MovieDto;
 import com.neu.finalproject.meskot.model.Movie;
 import com.neu.finalproject.meskot.model.MovieMetadata;
 import com.neu.finalproject.meskot.repository.MovieMetadataRepository;
@@ -22,6 +23,7 @@ import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -61,6 +63,36 @@ public class MovieService implements MovieServiceImpl {
     public Optional<Movie> getMovieById(Long id) {
         return movieRepository.findById(id);
     }
+
+    public ResponseEntity<List<MovieDto>> searchMovies( String query) {
+        List<Movie> movies = movieRepository.searchMovies(query);
+        List<MovieDto> dtos = movies.stream()
+                .map(MovieDto::fromEntity)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(dtos);
+    }
+    public ResponseEntity<Resource> downloadMovie(Long id) {
+        Optional<Movie> movieOpt = movieRepository.findById(id);
+        if (movieOpt.isEmpty()) return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+
+        Movie movie = movieOpt.get();
+        Path filePath = Paths.get(movie.getFilePath());
+        if (!Files.exists(filePath)) return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+
+        try {
+            Resource resource = new UrlResource(filePath.toUri());
+            String filename = filePath.getFileName().toString();
+
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                    .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                    .body(resource);
+
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
 
     public ResponseEntity<Resource> streamMovie(Long id, String rangeHeader) {
         Optional<Movie> movieOpt = getMovieById(id);

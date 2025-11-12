@@ -67,7 +67,15 @@ public class Controller {
         return ResponseEntity.ok(dtos);
     }
 
+    @GetMapping("/{id}/download")
+    public ResponseEntity<Resource> downloadVideo(@PathVariable Long id) {
+        return movieService.downloadMovie(id);
+    }
 
+    @GetMapping("/search")
+    public ResponseEntity<List<MovieDto>> searchMovies(@RequestParam("query") String query) {
+        return movieService.searchMovies(query);
+    }
     @GetMapping("/{id}/stream")
     public ResponseEntity<Resource> streamVideo(
             @PathVariable Long id,
