@@ -1,7 +1,9 @@
 package com.neu.finalproject.meskot.controller;
 
 
+import com.neu.finalproject.meskot.dto.MovieDto;
 import com.neu.finalproject.meskot.model.Movie;
+import com.neu.finalproject.meskot.repository.MovieRepository;
 import com.neu.finalproject.meskot.service.MovieService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,6 +23,7 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
 import java.util.Optional;
 
 @RestController
@@ -41,6 +44,29 @@ public class Controller {
         public String resolution;
     }
     private final MovieService movieService;
+    private final MovieRepository movieRepository;
+
+    @GetMapping("/movies")
+    public ResponseEntity<List<MovieDto>> getAllMovies() {
+        List<Movie> movies = movieRepository.findAllByOrderByUploadedDateDesc();
+        List<MovieDto> dtos = movies.stream().map(movie -> {
+            MovieDto dto = new MovieDto();
+            dto.setId(movie.getId());
+            dto.setTitle(movie.getTitle());
+            dto.setFilePath(movie.getFilePath());
+            dto.setUploadedDate(movie.getUploadedDate());
+            if (!movie.getMetadataList().isEmpty()) {
+                var meta = movie.getMetadataList().get(0);
+                dto.setResolution(meta.getResolution());
+                dto.setSizeInBytes(meta.getSizeInBytes());
+                dto.setFormat(meta.getFormat());
+            }
+            return dto;
+        }).toList();
+
+        return ResponseEntity.ok(dtos);
+    }
+
 
     @GetMapping("/{id}/stream")
     public ResponseEntity<Resource> streamVideo(
