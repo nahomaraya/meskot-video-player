@@ -5,6 +5,9 @@ import com.neu.finalproject.meskot.model.Movie;
 import com.neu.finalproject.meskot.service.MovieService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
+import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import io.swagger.v3.oas.annotations.Operation;
@@ -14,9 +17,14 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.parameters.RequestBody;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Optional;
 
 @RestController
-@RequestMapping("/api/upload")
+@RequestMapping("/api")
 @RequiredArgsConstructor
 
 
@@ -34,7 +42,20 @@ public class Controller {
     }
     private final MovieService movieService;
 
-    @PostMapping
+    @GetMapping("/{id}/stream")
+    public ResponseEntity<Resource> streamVideo(
+            @PathVariable Long id,
+            @RequestHeader(value = "Range", required = false) String rangeHeader
+    ) {
+        try {
+            return movieService.streamMovie(id, rangeHeader);
+        }
+        catch (Exception e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    @PostMapping("/upload")
     @Operation(
             summary = "Upload a video",
             description = "Uploads a video file with title and resolution",

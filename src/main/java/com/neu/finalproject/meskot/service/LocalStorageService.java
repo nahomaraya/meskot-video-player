@@ -45,8 +45,7 @@ public class LocalStorageService implements StorageService {
         obj.setLocationType("LOCAL");
         obj.setName(file.getName());
         storedObjectRepository.save(obj);
-
-        return key;
+        return dest.toAbsolutePath().toString();
     }
 
     @Override

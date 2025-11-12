@@ -25,22 +25,12 @@ public class CompressionService {
         return out;
     }
 
-    public File decompress(File compressed) throws IOException {
-        String name = compressed.getName();
-        String outName = name.endsWith(".zst") ? name.substring(0, name.length() - 4) : name + ".decompressed";
-        File out = new File(compressed.getParentFile(), outName);
-
-        try (FileInputStream fis = new FileInputStream(compressed);
-             BufferedInputStream bis = new BufferedInputStream(fis);
-             ZstdInputStream zis = new ZstdInputStream(bis);
-             FileOutputStream fos = new FileOutputStream(out)) {
-
-            byte[] buffer = new byte[8192];
-            int read;
-            while ((read = zis.read(buffer)) != -1) {
-                fos.write(buffer, 0, read);
-            }
+    public File decompressZst(File compressedFile) throws IOException {
+        File tempFile = File.createTempFile("decompressed-", ".mp4");
+        try (ZstdInputStream zin = new ZstdInputStream(new FileInputStream(compressedFile));
+             FileOutputStream out = new FileOutputStream(tempFile)) {
+            zin.transferTo(out);
         }
-        return out;
+        return tempFile;
     }
 }
