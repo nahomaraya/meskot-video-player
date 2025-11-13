@@ -26,7 +26,6 @@ public class MovieDto {
 
     }
 
-    // ✅ Static factory method
     public static MovieDto fromEntity(Movie movie) {
         return new MovieDto(
                 movie.getId(),

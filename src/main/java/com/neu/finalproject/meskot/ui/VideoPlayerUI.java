@@ -15,6 +15,8 @@ import uk.co.caprica.vlcj.player.component.EmbeddedMediaPlayerComponent;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -22,7 +24,6 @@ import java.net.URLEncoder;
 import java.util.stream.Collectors;
 import java.util.List;
 public class VideoPlayerUI extends JFrame {
-
     // Simple inner model class for deserialization
 //    @Getter
 //    static class MovieItem {
@@ -32,98 +33,115 @@ public class VideoPlayerUI extends JFrame {
 
     private final EmbeddedMediaPlayerComponent mediaPlayerComponent;
     private final JComboBox<String> movieDropdown;
-    private final JButton playButton;
-    private final JButton pauseButton;
-    private final JButton stopButton;
+    ;
     private List<MovieDto> movieList;
-    private JTextField searchField;
-    private JButton searchButton;
-    private JButton downloadButton;
+    private final JTextField searchField;
+    private final JSlider volumeSlider;
+    private final DefaultListModel<MovieDto> movieListModel;
+    private JList<MovieDto> movieListUI;
+
 
 
     public VideoPlayerUI() {
-        super("Meskot Video Player");
-
-
-
-        // URL input
-//        urlField = new JTextField("http://localhost:8080/api/2/stream");
-//        playButton = new JButton("Play");
-
-        // Layout setup
-//        JPanel controlPanel = new JPanel(new BorderLayout(5, 5));
-//        controlPanel.add(urlField, BorderLayout.CENTER);
-//        controlPanel.add(playButton, BorderLayout.EAST);
-//
-//        setLayout(new BorderLayout());
-//        add(controlPanel, BorderLayout.NORTH);
-//        add(mediaPlayerComponent, BorderLayout.CENTER);
-
-        // Frame properties
-        setTitle("🎬 Meskot Player");
+        super("🎬 Meskot Player");
         setSize(800, 600);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
 
+        // --- Media Player ---
         mediaPlayerComponent = new EmbeddedMediaPlayerComponent();
-        add(mediaPlayerComponent, BorderLayout.CENTER);
 
+        // --- Movie List ---
+        movieListModel = new DefaultListModel<>();
+        movieListUI = new JList<>(movieListModel);
+        movieListUI.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        movieListUI.setCellRenderer(new MovieCellRenderer());
+        JScrollPane listScrollPane = new JScrollPane(movieListUI);
+        listScrollPane.setPreferredSize(new Dimension(220, 600));
 
+        // Double-click to play
+        movieListUI.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2) {
+                    playSelectedMovie();
+                }
+            }
+        });
+
+        // --- Top Panel (Search + Download) ---
         JPanel topPanel = new JPanel(new FlowLayout());
         searchField = new JTextField(20);
-        searchButton = new JButton("Search");
-        downloadButton = new JButton("Download");
+        JButton searchButton = new JButton("Search");
+        JButton downloadButton = new JButton("Download");
 
         topPanel.add(new JLabel("Search:"));
         topPanel.add(searchField);
         topPanel.add(searchButton);
         topPanel.add(downloadButton);
 
-        add(topPanel, BorderLayout.NORTH);
-
-//        // Button action
-//        playButton.addActionListener(e -> playVideo());
-
-        // Controls
+        // --- Control Panel ---
         JPanel controlPanel = new JPanel();
         movieDropdown = new JComboBox<>();
-        playButton = new JButton("▶ Play");
-        pauseButton = new JButton("⏸ Pause");
-        stopButton = new JButton("⏹ Stop");
+        JButton playButton = new JButton("▶ Play");
+        JButton pauseButton = new JButton("⏸ Pause");
+        JButton stopButton = new JButton("⏹ Stop");
+        JButton skipForwardButton = new JButton("⏩ +10s");
+        JButton skipBackwardButton = new JButton("⏪ -10s");
+        volumeSlider = new JSlider(0, 100, 80);
 
         controlPanel.add(movieDropdown);
         controlPanel.add(playButton);
         controlPanel.add(pauseButton);
         controlPanel.add(stopButton);
+        controlPanel.add(skipBackwardButton);
+        controlPanel.add(skipForwardButton);
+        controlPanel.add(new JLabel("🔊"));
+        controlPanel.add(volumeSlider);
 
-        add(controlPanel, BorderLayout.SOUTH);
+        // --- Player Panel (Media Player + Controls) ---
+        JPanel playerPanel = new JPanel(new BorderLayout());
+        playerPanel.add(mediaPlayerComponent, BorderLayout.CENTER);
+        playerPanel.add(controlPanel, BorderLayout.SOUTH);
 
-        // Actions
-        playButton.addActionListener(this::onPlay);
+        // --- Split Pane (Movie List | Player) ---
+        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, listScrollPane, playerPanel);
+        splitPane.setDividerLocation(230);
+        splitPane.setResizeWeight(0);
+
+        add(topPanel, BorderLayout.NORTH);
+        add(splitPane, BorderLayout.CENTER);
+
+        // --- Actions ---
+        playButton.addActionListener(e -> playSelectedMovie());
         pauseButton.addActionListener(e -> mediaPlayerComponent.mediaPlayer().controls().pause());
         stopButton.addActionListener(e -> mediaPlayerComponent.mediaPlayer().controls().stop());
+        skipForwardButton.addActionListener(e -> skip(10));
+        skipBackwardButton.addActionListener(e -> skip(-10));
+        volumeSlider.addChangeListener(e ->
+                mediaPlayerComponent.mediaPlayer().audio().setVolume(volumeSlider.getValue())
+        );
+
         searchButton.addActionListener(e -> {
             String query = searchField.getText().trim();
-            if (!query.isEmpty()) {
-                loadMoviesFromApi(query);
-            } else {
-                loadMoviesFromApi(null);
-            }
+            if (!query.isEmpty()) searchMovies(query);
+            else searchMovies(null);
         });
 
         downloadButton.addActionListener(e -> {
             int index = movieDropdown.getSelectedIndex();
-            if (index >= 0 && index < movieList.size()) {
-                MovieDto selected = movieList.get(index);
-                downloadMovie(selected.getId());
+            if (index >= 0 && movieList != null && index < movieList.size()) {
+                downloadMovie(movieList.get(index).getId());
             }
         });
 
-        // Show window
+        // Load movies from backend
+        loadMovies();
+
         setVisible(true);
     }
 
-    private void loadMoviesFromApi(String query) {
+    private void searchMovies(String query) {
         try {
             String apiUrl = "http://localhost:8080/api" + (query != null ? "/search?query=" + URLEncoder.encode(query, "UTF-8") : "");
             URL url = new URL(apiUrl);
@@ -191,6 +209,58 @@ public class VideoPlayerUI extends JFrame {
         MovieDto selected = movieList.get(index);
         String streamUrl = "http://localhost:8080/api/" + selected.getId() + "/stream";
         mediaPlayerComponent.mediaPlayer().media().play(streamUrl);
+    }
+
+    private void skip(int seconds) {
+        long currentTime = mediaPlayerComponent.mediaPlayer().status().time();
+        long newTime = currentTime + (seconds * 1000L);
+        if (newTime < 0) newTime = 0;
+        mediaPlayerComponent.mediaPlayer().controls().setTime(newTime);
+    }
+
+
+    private void loadMovies() {
+        try {
+            URL url = new URL("http://localhost:8080/api/movies");
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.connect();
+
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
+                String json = reader.lines().collect(Collectors.joining());
+                ObjectMapper mapper = new ObjectMapper();
+                mapper.registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
+                mapper.disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+                mapper.disable(com.fasterxml.jackson.databind.MapperFeature.REQUIRE_HANDLERS_FOR_JAVA8_TIMES);
+                movieList = mapper.readValue(json, new TypeReference<List<MovieDto>>() {});;
+                movieListModel.clear();
+                for (MovieDto m : movieList) {
+                    movieListModel.addElement(m);
+                }
+            }
+
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Failed to load movies: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    private void playSelectedMovie() {
+        int index = movieListUI.getSelectedIndex();
+        if (index < 0 || movieList == null || movieList.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Please select a movie first.");
+            return;
+        }
+
+        MovieDto selected = movieList.get(index);
+        String streamUrl = "http://localhost:8080/api/" + selected.getId() + "/stream";
+        System.out.println("▶ Playing: " + selected.getTitle() + " (" + streamUrl + ")");
+        String[] options = {":network-caching=300"};
+        mediaPlayerComponent.mediaPlayer().media().play(streamUrl, options);
+    }
+
+    public void release() {
+        mediaPlayerComponent.release();
     }
 
 
