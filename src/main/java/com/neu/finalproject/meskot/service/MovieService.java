@@ -92,65 +92,35 @@ public class MovieService implements MovieServiceImpl {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
-
-
     public ResponseEntity<Resource> streamMovie(Long id, String rangeHeader) {
-        Optional<Movie> movieOpt = getMovieById(id);
+        Optional<Movie> movieOpt = movieRepository.findById(id);
         if (movieOpt.isEmpty()) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
 
         Movie movie = movieOpt.get();
-        Path path = Paths.get(movie.getFilePath());
-        if (!Files.exists(path)) {
+        Path moviePath = Paths.get(movie.getFilePath());
+        if (!Files.exists(moviePath)) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
 
         try {
-            File file = path.toFile();
+            File file = moviePath.toFile();
             File streamFile = file;
 
-            // ✅ If it's a .zst file, decompress it to a temporary .mp4 first
+            // ✅ Decompress if needed
             if (file.getName().endsWith(".zst")) {
                 streamFile = compressionService.decompressZst(file);
             }
 
-            long fileLength = streamFile.length();
-            long rangeStart = 0;
-            long rangeEnd = fileLength - 1;
-
-            if (rangeHeader != null && rangeHeader.startsWith("bytes=")) {
-                String[] ranges = rangeHeader.substring(6).split("-");
-                rangeStart = Long.parseLong(ranges[0]);
-                if (ranges.length > 1 && !ranges[1].isEmpty()) {
-                    rangeEnd = Long.parseLong(ranges[1]);
-                }
-            }
-
-            if (rangeEnd > fileLength - 1) rangeEnd = fileLength - 1;
-            long contentLength = rangeEnd - rangeStart + 1;
-
-            InputStream inputStream = new BufferedInputStream(new FileInputStream(streamFile));
-            inputStream.skip(rangeStart);
-            Resource resource = new InputStreamResource(inputStream);
-
-            HttpHeaders headers = new HttpHeaders();
-            headers.set("Content-Range", "bytes " + rangeStart + "-" + rangeEnd + "/" + fileLength);
-            headers.set("Accept-Ranges", "bytes");
-            headers.setContentLength(contentLength);
-            headers.setContentType(MediaType.valueOf("video/mp4"));
-
-            return ResponseEntity.status(rangeHeader == null ? HttpStatus.OK : HttpStatus.PARTIAL_CONTENT)
-                    .headers(headers)
-                    .body(resource);
-
+            return buildStreamingResponse(streamFile, rangeHeader);
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 
-    private ResponseEntity<Resource> buildStreamingResponse(File file, String rangeHeader) throws IOException, MalformedURLException {
+    private ResponseEntity<Resource> buildStreamingResponse(File file, String rangeHeader) throws IOException {
         long fileLength = file.length();
         long rangeStart = 0;
         long rangeEnd = fileLength - 1;
@@ -170,17 +140,28 @@ public class MovieService implements MovieServiceImpl {
         }
 
         long contentLength = rangeEnd - rangeStart + 1;
-        HttpStatus status = (rangeHeader == null) ? HttpStatus.OK : HttpStatus.PARTIAL_CONTENT;
+
+        // ✅ Seek to range start
+        RandomAccessFile raf = new RandomAccessFile(file, "r");
+        raf.seek(rangeStart);
+
+        // ✅ Limit read to requested range
+        InputStream inputStream = new BufferedInputStream(new FileInputStream(raf.getFD())) {
+            @Override
+            public int available() throws IOException {
+                return (int) contentLength;
+            }
+        };
+
+        InputStreamResource resource = new InputStreamResource(inputStream);
 
         HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaTypeFactory.getMediaType(file.getName())
-                .orElse(MediaType.APPLICATION_OCTET_STREAM));
-        headers.setContentLength(contentLength);
         headers.add("Accept-Ranges", "bytes");
         headers.add("Content-Range", "bytes " + rangeStart + "-" + rangeEnd + "/" + fileLength);
+        headers.setContentLength(contentLength);
+        headers.setContentType(MediaType.valueOf("video/mp4"));
 
-        // Use UrlResource for efficient streaming
-        Resource resource = new UrlResource(file.toURI());
+        HttpStatus status = (rangeHeader == null) ? HttpStatus.OK : HttpStatus.PARTIAL_CONTENT;
 
         return new ResponseEntity<>(resource, headers, status);
     }

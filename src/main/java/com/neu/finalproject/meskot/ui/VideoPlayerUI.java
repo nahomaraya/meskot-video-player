@@ -125,7 +125,7 @@ public class VideoPlayerUI extends JFrame {
 
     private void loadMoviesFromApi(String query) {
         try {
-            String apiUrl = "http://localhost:8080/api/movies" + (query != null ? "/search?query=" + URLEncoder.encode(query, "UTF-8") : "");
+            String apiUrl = "http://localhost:8080/api" + (query != null ? "/search?query=" + URLEncoder.encode(query, "UTF-8") : "");
             URL url = new URL(apiUrl);
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("GET");
@@ -150,7 +150,7 @@ public class VideoPlayerUI extends JFrame {
 
     private void downloadMovie(Long movieId) {
         try {
-            URL url = new URL("http://localhost:8080/api/movies/" + movieId + "/download");
+            URL url = new URL("http://localhost:8080/api/" + movieId + "/download");
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("GET");
 
