@@ -3,7 +3,10 @@ package com.neu.finalproject.meskot.controller;
 
 import com.neu.finalproject.meskot.dto.MovieDto;
 import com.neu.finalproject.meskot.model.Movie;
+import com.neu.finalproject.meskot.model.UploadJob;
 import com.neu.finalproject.meskot.repository.MovieRepository;
+import com.neu.finalproject.meskot.repository.UploadJobRepository;
+import com.neu.finalproject.meskot.service.LocalStorageService;
 import com.neu.finalproject.meskot.service.MovieService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,7 +27,9 @@ import java.io.RandomAccessFile;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api")
@@ -89,49 +94,47 @@ public class Controller {
         }
     }
 
+    @Autowired
+    private UploadJobRepository uploadJobRepository;
+
+    @Autowired
+    private LocalStorageService localStorageService;
+
     @PostMapping("/upload")
-    @Operation(
-            summary = "Upload a video",
-            description = "Uploads a video file with title and resolution",
-            requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
-                    required = true,
-                    content = @Content(
-                            mediaType = "multipart/form-data",
-                            schema = @Schema(implementation = UploadVideoRequest.class)
-                    )
-            )
-    )
-    public String uploadVideo(
-            @io.swagger.v3.oas.annotations.parameters.RequestBody(
-                    description = "Video file to upload",
-                    required = true,
-                    content = @Content(schema = @Schema(type = "string", format = "binary"))
-            )
+    public ResponseEntity<?> uploadMovie(
             @RequestParam("file") MultipartFile file,
+            @RequestParam("title") String title,
+            @RequestParam("resolution") String resolution) {
 
-            @Parameter(description = "Title of the video")
-            @RequestParam(defaultValue = "Sample Video") String title,
-
-            @Parameter(
-                    description = "Resolution of the video",
-                    schema = @Schema(type = "string", example = "720p", allowableValues = {
-                            "240p", "360p", "480p", "720p", "1080p"
-                    })
-            )
-            String resolution
-    ) {
         try {
-            // Save temp file
-            File tempFile = File.createTempFile("upload-", file.getOriginalFilename());
-            file.transferTo(tempFile);
+            // 1. Save the raw file to a temporary location
+            File tempFile = localStorageService.saveTempFile(file);
 
-            // Process with MovieService
-             movieService.handleUpload(tempFile, title, resolution);
+            // 2. Create the job
+            UploadJob job = new UploadJob();
+            String jobId = UUID.randomUUID().toString();
+            job.setId(Long.valueOf(jobId));
+            job.setStatus("PENDING");
+            job.setProgress(0);
+            uploadJobRepository.save(job);
 
-            return "Uploaded successfully!";
+            // 3. Start the async task
+            movieService.handleUpload(tempFile, title, resolution, jobId);
+
+            // 4. Return the Job ID immediately
+            return ResponseEntity.accepted().body(Map.of("jobId", jobId));
+
         } catch (Exception e) {
             e.printStackTrace();
-            return "Upload failed: " + e.getMessage();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", e.getMessage()));
         }
+    }
+
+    @GetMapping("/upload-status/{jobId}")
+    public ResponseEntity<UploadJob> getUploadStatus(@PathVariable String jobId) {
+        return uploadJobRepository.findById(jobId)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
     }
 }

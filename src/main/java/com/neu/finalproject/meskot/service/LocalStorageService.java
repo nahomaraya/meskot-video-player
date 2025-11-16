@@ -7,6 +7,7 @@ import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.*;
 import java.nio.file.Files;
@@ -86,5 +87,18 @@ public class LocalStorageService implements StorageService {
         Path p = toPath(objectKey);
         Files.deleteIfExists(p);
         storedObjectRepository.findByObjectKey(objectKey).ifPresent(storedObjectRepository::delete);
+    }
+
+    public File saveTempFile(MultipartFile multipartFile) throws IOException {
+        // Create temp file in the system's default temp directory
+        Path tempDir = Paths.get(System.getProperty("java.io.tmpdir"));
+        Path tempFile = tempDir.resolve(
+                UUID.randomUUID().toString() + "-" + multipartFile.getOriginalFilename()
+        );
+
+        // Transfer the file
+        multipartFile.transferTo(tempFile);
+
+        return tempFile.toFile();
     }
 }

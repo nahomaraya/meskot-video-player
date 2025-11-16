@@ -3,8 +3,10 @@ package com.neu.finalproject.meskot.service;
 import com.neu.finalproject.meskot.dto.MovieDto;
 import com.neu.finalproject.meskot.model.Movie;
 import com.neu.finalproject.meskot.model.MovieMetadata;
+import com.neu.finalproject.meskot.model.UploadJob;
 import com.neu.finalproject.meskot.repository.MovieMetadataRepository;
 import com.neu.finalproject.meskot.repository.MovieRepository;
+import com.neu.finalproject.meskot.repository.UploadJobRepository;
 import com.neu.finalproject.meskot.service.impl.MovieServiceImpl;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,6 +17,8 @@ import org.springframework.stereotype.Service;
 import com.github.luben.zstd.ZstdInputStream;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.scheduling.annotation.Async;
+import org.springframework.transaction.annotation.Transactional;
+
 import java.util.concurrent.CompletableFuture;
 
 import java.io.*;
@@ -35,6 +39,8 @@ public class MovieService implements MovieServiceImpl {
     private MovieRepository movieRepository;
     @Autowired
     private MovieMetadataRepository movieMetadataRepository;
+    @Autowired
+    private UploadJobRepository uploadJobRepository;
 
     private final EncodingService encodingService;
 
@@ -185,36 +191,78 @@ public class MovieService implements MovieServiceImpl {
     }
 
     @Async("encodingTaskExecutor")
-    public void handleUpload(File uploadedFile, String title, String versionResolution) throws Exception {
-        // 1. Encode to versions
-        System.out.println(versionResolution);
-        File encoded720 =  encodingService.encode(
-                uploadedFile,
-                versionResolution, // "720p"
-                "mp4",
-                "h265" // <-- Use the new codec
-        );
-        // 2. Compress version
-//        File compressed = compressionService.compress(encoded720);
-        // 3. Store in object store
-        String storagePath = localStorageService.store(encoded720, "movies/" + title.getClass().getName() +"/"  + encoded720.getName());
-        // Save Movie entity
-        Movie movie = new Movie();
-        movie.setTitle(title);
-        movie.setFilePath(storagePath);
-        movie.setUploadedDate(LocalDateTime.now());
-        movieRepository.save(movie);
+    @Transactional // Good practice for methods that save multiple entities
+    public void handleUpload(File uploadedFile, String title, String versionResolution, String jobId) {
 
-        // Save MovieMetaData
-        MovieMetadata meta = new MovieMetadata();
-        meta.setMovie(movie);
-        meta.setResolution(versionResolution);
-        meta.setSizeInBytes(encoded720.length());
-        meta.setFormat("mp4");
-        meta.setDuration(0.0); // Optional: calculate via JavaCV if needed
-        movieMetadataRepository.save(meta);
-        System.out.println("Finished background encoding for: " + title);
-        uploadedFile.delete();
+        UploadJob job = uploadJobRepository.findById(jobId).orElse(null);
+        if (job == null) {
+            System.err.println("Job not found: " + jobId);
+            return;
+        }
+
+        try {
+            // 1. Update job status
+            job.setStatus("ENCODING");
+            job.setProgress(0);
+            uploadJobRepository.save(job);
+
+            // 2. Define the progress callback
+            ProgressCallback callback = (percent) -> {
+                // We find a fresh instance in this new thread
+                UploadJob currentJob = uploadJobRepository.findById(jobId).get();
+                currentJob.setProgress(percent);
+                uploadJobRepository.save(currentJob);
+                System.out.println("Job " + jobId + " progress: " + percent + "%");
+            };
+
+            // 3. Encode to versions, passing the callback
+            System.out.println("Starting background encoding for: " + title);
+            File encoded720 = encodingService.encode(
+                    uploadedFile,
+                    versionResolution,
+                    "mp4",
+                    "h265",
+                    callback // Pass the callback here
+            );
+
+            // 4. Store in object store
+            String storagePath = localStorageService.store(encoded720, "movies/" + title + "/" + encoded720.getName());
+
+            // 5. Save Movie entity
+            Movie movie = new Movie();
+            movie.setTitle(title);
+            movie.setFilePath(storagePath);
+            movie.setUploadedDate(LocalDateTime.now());
+            Movie savedMovie = movieRepository.save(movie); // Save and get the ID
+
+            // 6. Save MovieMetaData
+            MovieMetadata meta = new MovieMetadata();
+            meta.setMovie(savedMovie);
+            meta.setResolution(versionResolution);
+            meta.setSizeInBytes(encoded720.length());
+            meta.setFormat("mp4-h265");
+            meta.setDuration(0.0);
+            movieMetadataRepository.save(meta);
+
+            // 7. Mark job as complete
+            job.setStatus("COMPLETED");
+            job.setProgress(100);
+            job.setResultingMovieId(savedMovie.getId());
+            uploadJobRepository.save(job);
+
+            System.out.println("Finished background encoding for: " + title);
+
+        } catch (Exception e) {
+            System.err.println("Failed to encode file " + title + ": " + e.getMessage());
+            e.printStackTrace();
+            // Mark job as failed
+            job.setStatus("FAILED");
+            job.setErrorMessage(e.getMessage());
+            uploadJobRepository.save(job);
+        } finally {
+            // Clean up the original uploaded file
+            uploadedFile.delete();
+        }
     }
 }
 

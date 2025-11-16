@@ -1,58 +1,39 @@
 package com.neu.finalproject.meskot.ui;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.neu.finalproject.meskot.dto.MovieDto;
-import com.neu.finalproject.meskot.model.Movie;
-import lombok.Getter;
-import org.apache.hc.client5.http.entity.mime.MultipartEntityBuilder;
-import uk.co.caprica.vlcj.factory.MediaPlayerFactory;
-import uk.co.caprica.vlcj.player.base.MediaPlayer;
+import com.neu.finalproject.meskot.ui.PlayerPresenter;
 import uk.co.caprica.vlcj.player.component.EmbeddedMediaPlayerComponent;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
-import java.io.*;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.net.URLEncoder;
-import java.util.stream.Collectors;
-import java.util.List;
-import org.apache.http.HttpEntity;
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.entity.ContentType;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClients;
 import java.io.File;
+import java.util.List;
 
-
+/**
+ * The View (V in MVP).
+ * This class is now "dumb." It is only responsible for creating, laying out,
+ * and displaying components. It delegates all actions to the Presenter.
+ */
 public class VideoPlayerUI extends JFrame {
-    // Simple inner model class for deserialization
-//    @Getter
-//    static class MovieItem {
-//        private Long id;
-//        private String title;
-//    }
 
+    private PlayerPresenter presenter;
+
+    // --- UI Components ---
     private final EmbeddedMediaPlayerComponent mediaPlayerComponent;
+    private final JList<MovieDto> movieListUI;
+    private final DefaultListModel<MovieDto> movieListModel;
     private final JComboBox<String> movieDropdown;
-    ;
-    private List<MovieDto> movieList;
     private final JTextField searchField;
     private final JSlider volumeSlider;
-    private final DefaultListModel<MovieDto> movieListModel;
-    private JList<MovieDto> movieListUI;
-    private JButton downloadButton = new JButton("Download");
-    private JProgressBar uploadProgressBar;
-
-
+    private final JButton downloadButton;
+    private final JButton uploadButton;
+    private final JProgressBar uploadProgressBar;
+    JButton playButton = new JButton("▶ Play");
+    JButton pauseButton = new JButton("⏸ Pause");
+    JButton stopButton = new JButton("⏹ Stop");
+    JButton skipForwardButton = new JButton("⏩ +10s");
+    JButton skipBackwardButton = new JButton("⏪ -10s");
+    JButton searchButton = new JButton("Search");
 
     public VideoPlayerUI() {
         super("🎬 Meskot Player");
@@ -60,10 +41,8 @@ public class VideoPlayerUI extends JFrame {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
 
-        // --- Media Player ---
+        // --- Init Components ---
         mediaPlayerComponent = new EmbeddedMediaPlayerComponent();
-
-        // --- Movie List ---
         movieListModel = new DefaultListModel<>();
         movieListUI = new JList<>(movieListModel);
         movieListUI.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
@@ -71,37 +50,31 @@ public class VideoPlayerUI extends JFrame {
         JScrollPane listScrollPane = new JScrollPane(movieListUI);
         listScrollPane.setPreferredSize(new Dimension(220, 600));
 
-        // Double-click to play
-        movieListUI.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent e) {
-                if (e.getClickCount() == 2) {
-                    playSelectedMovie();
-                }
-            }
-        });
-
-        // --- Top Panel (Search + Download) ---
-        JPanel topPanel = new JPanel(new FlowLayout());
         searchField = new JTextField(20);
-        JButton searchButton = new JButton("Search");
-
-
-        topPanel.add(new JLabel("Search:"));
-        topPanel.add(searchField);
-        topPanel.add(searchButton);
-        topPanel.add(downloadButton);
-
-        // --- Control Panel ---
-        JPanel controlPanel = new JPanel();
+        downloadButton = new JButton("Download");
+        uploadButton = new JButton("Upload");
+        uploadProgressBar = new JProgressBar(0, 100);
         movieDropdown = new JComboBox<>();
-        JButton playButton = new JButton("▶ Play");
-        JButton pauseButton = new JButton("⏸ Pause");
-        JButton stopButton = new JButton("⏹ Stop");
-        JButton skipForwardButton = new JButton("⏩ +10s");
-        JButton skipBackwardButton = new JButton("⏪ -10s");
         volumeSlider = new JSlider(0, 100, 80);
 
+        // --- Layout ---
+        // Top Panel (Search, Download, Upload)
+        JPanel topPanel = new JPanel(new BorderLayout());
+        JPanel searchPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        searchPanel.add(new JLabel("Search:"));
+        searchPanel.add(searchField);
+        searchPanel.add(searchButton);
+        searchPanel.add(downloadButton);
+        searchPanel.add(uploadButton);
+
+        uploadProgressBar.setStringPainted(true);
+        uploadProgressBar.setVisible(false); // Hide until needed
+
+        topPanel.add(searchPanel, BorderLayout.CENTER);
+        topPanel.add(uploadProgressBar, BorderLayout.SOUTH);
+
+        // Control Panel (Playback)
+        JPanel controlPanel = new JPanel();
         controlPanel.add(movieDropdown);
         controlPanel.add(playButton);
         controlPanel.add(pauseButton);
@@ -111,12 +84,12 @@ public class VideoPlayerUI extends JFrame {
         controlPanel.add(new JLabel("🔊"));
         controlPanel.add(volumeSlider);
 
-        // --- Player Panel (Media Player + Controls) ---
+        // Player Panel
         JPanel playerPanel = new JPanel(new BorderLayout());
         playerPanel.add(mediaPlayerComponent, BorderLayout.CENTER);
         playerPanel.add(controlPanel, BorderLayout.SOUTH);
 
-        // --- Split Pane (Movie List | Player) ---
+        // Split Pane
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, listScrollPane, playerPanel);
         splitPane.setDividerLocation(230);
         splitPane.setResizeWeight(0);
@@ -124,259 +97,122 @@ public class VideoPlayerUI extends JFrame {
         add(topPanel, BorderLayout.NORTH);
         add(splitPane, BorderLayout.CENTER);
 
-        // --- Actions ---
-        playButton.addActionListener(e -> playSelectedMovie());
+        // --- Attach Listeners to Presenter ---
+        // This method will be called by Application.java to hook up the actions
+    }
+
+    /**
+     * Connects all UI component actions to the presenter.
+     * This is the core of the MVP pattern.
+     */
+    public void attachPresenter(PlayerPresenter presenter) {
+        this.presenter = presenter;
+
+        // Playback Actions
+        playButton.addActionListener(e -> presenter.onPlay());
         pauseButton.addActionListener(e -> mediaPlayerComponent.mediaPlayer().controls().pause());
         stopButton.addActionListener(e -> mediaPlayerComponent.mediaPlayer().controls().stop());
-        skipForwardButton.addActionListener(e -> skip(10));
-        skipBackwardButton.addActionListener(e -> skip(-10));
+        skipForwardButton.addActionListener(e -> presenter.onSkip(10));
+        skipBackwardButton.addActionListener(e -> presenter.onSkip(-10));
         volumeSlider.addChangeListener(e ->
                 mediaPlayerComponent.mediaPlayer().audio().setVolume(volumeSlider.getValue())
         );
 
-        searchButton.addActionListener(e -> {
-            String query = searchField.getText().trim();
-            if (!query.isEmpty()) searchMovies(query);
-            else searchMovies(null);
-        });
-
-        downloadButton.addActionListener(e -> {
-            int index = movieDropdown.getSelectedIndex(); // Or get from JList
-            if (index >= 0 && movieList != null && index < movieList.size()) {
-                // We don't call downloadMovie directly anymore
-                // We start the background worker
-                startDownloadWorker(movieList.get(index));
+        // Movie List Actions
+        movieListUI.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                if (evt.getClickCount() == 2) {
+                    presenter.onPlay();
+                }
             }
         });
 
-        // Load movies from backend
-        loadMovies();
-
-        setVisible(true);
+        // Top Panel Actions
+        searchButton.addActionListener(e -> presenter.onSearch());
+        downloadButton.addActionListener(e -> presenter.onDownload());
+        uploadButton.addActionListener(e -> presenter.onUpload());
     }
 
-    private void searchMovies(String query) {
-        try {
-            String apiUrl = "http://localhost:8080/api" + (query != null ? "/search?query=" + URLEncoder.encode(query, "UTF-8") : "");
-            URL url = new URL(apiUrl);
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("GET");
-            conn.connect();
+    // --- Public Methods for Presenter to Call ---
 
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
-                String json = reader.lines().collect(Collectors.joining());
-                ObjectMapper mapper = new ObjectMapper();
-                mapper.registerModule(new JavaTimeModule());
-                mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-
-                movieList = mapper.readValue(json, new TypeReference<List<MovieDto>>() {});
-                movieDropdown.removeAllItems();
-                movieList.forEach(m -> movieDropdown.addItem(m.getTitle()));
-            }
-
-        } catch (Exception e) {
-            JOptionPane.showMessageDialog(this, "Failed to load movies: " + e.getMessage());
-            e.printStackTrace();
+    public void updateMovieList(List<MovieDto> movies) {
+        movieListModel.clear();
+        movieDropdown.removeAllItems();
+        for (MovieDto m : movies) {
+            movieListModel.addElement(m);
+            movieDropdown.addItem(m.getTitle());
         }
     }
 
-    private void startDownloadWorker(MovieDto movie) {
+    public void showErrorMessage(String message) {
+        JOptionPane.showMessageDialog(this, message, "Error", JOptionPane.ERROR_MESSAGE);
+    }
+
+    public void showInfoMessage(String message) {
+        JOptionPane.showMessageDialog(this, message, "Info", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    public void setDownloadButtonState(boolean enabled, String text) {
+        downloadButton.setEnabled(enabled);
+        downloadButton.setText(text);
+    }
+
+    public void setUploadButtonState(boolean enabled) {
+        uploadButton.setEnabled(enabled);
+    }
+
+    public void setUploadProgress(String text, int value, boolean indeterminate) {
+        uploadProgressBar.setVisible(true);
+        uploadProgressBar.setIndeterminate(indeterminate);
+        uploadProgressBar.setString(text);
+        uploadProgressBar.setValue(value);
+    }
+
+    public void hideUploadProgressAfterDelay(String message) {
+        uploadProgressBar.setString(message);
+        uploadProgressBar.setIndeterminate(false);
+        javax.swing.Timer hideTimer = new javax.swing.Timer(5000, e -> {
+            uploadProgressBar.setVisible(false);
+        });
+        hideTimer.setRepeats(false); // Make it run only once
+        hideTimer.start();
+    }
+
+    public File showSaveDialog(String suggestedName) {
         JFileChooser chooser = new JFileChooser();
-        chooser.setSelectedFile(new File(movie.getTitle() + ".mp4"));
-
+        chooser.setSelectedFile(new File(suggestedName));
         if (chooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
-            File outputFile = chooser.getSelectedFile();
-
-            // Disable the download button while working
-            downloadButton.setEnabled(false);
-            downloadButton.setText("Downloading...");
-
-            // SwingWorker<Void, Void> means:
-            // Void: doInBackground() returns nothing
-            // Void: process() is not used
-            SwingWorker<Void, Void> worker = new SwingWorker<>() {
-
-                @Override
-                protected Void doInBackground() throws Exception {
-                    URL url = new URL("http://localhost:8080/api/" + movie.getId() + "/download");
-                    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                    conn.setRequestMethod("GET");
-
-                    if (conn.getResponseCode() == 200) {
-                        long fileSize = conn.getContentLengthLong();
-
-                        // This creates a popup progress bar!
-                        ProgressMonitorInputStream pmis = new ProgressMonitorInputStream(
-                                VideoPlayerUI.this,
-                                "Downloading " + movie.getTitle(),
-                                conn.getInputStream()
-                        );
-
-                        // Set progress bar max value
-                        if (fileSize != -1) {
-                            pmis.getProgressMonitor().setMaximum((int) fileSize);
-                        }
-
-                        try (InputStream in = new BufferedInputStream(pmis);
-                             FileOutputStream out = new FileOutputStream(outputFile)) {
-
-                            byte[] buffer = new byte[8192];
-                            int bytesRead;
-                            while ((bytesRead = in.read(buffer)) != -1) {
-                                out.write(buffer, 0, bytesRead);
-                            }
-                        }
-                    } else {
-                        throw new IOException("Server responded with: " + conn.getResponseMessage());
-                    }
-                    return null;
-                }
-
-                @Override
-                protected void done() {
-                    try {
-                        // get() will re-throw any exception from doInBackground()
-                        get();
-                        JOptionPane.showMessageDialog(VideoPlayerUI.this,
-                                "Downloaded successfully!",
-                                "Download Complete",
-                                JOptionPane.INFORMATION_MESSAGE);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                        JOptionPane.showMessageDialog(VideoPlayerUI.this,
-                                "Error downloading file: " + e.getMessage(),
-                                "Download Failed",
-                                JOptionPane.ERROR_MESSAGE);
-                    } finally {
-                        // Re-enable the button
-                        downloadButton.setEnabled(true);
-                        downloadButton.setText("Download");
-                    }
-                }
-            };
-
-            // This starts the worker on a new thread
-            worker.execute();
+            return chooser.getSelectedFile();
         }
-    }
-    private void onPlay(ActionEvent event) {
-        int index = movieDropdown.getSelectedIndex();
-        if (index < 0 || movieList == null) return;
-
-        MovieDto selected = movieList.get(index);
-        String streamUrl = "http://localhost:8080/api/" + selected.getId() + "/stream";
-        mediaPlayerComponent.mediaPlayer().media().play(streamUrl);
+        return null;
     }
 
-    private void skip(int seconds) {
-        long currentTime = mediaPlayerComponent.mediaPlayer().status().time();
-        long newTime = currentTime + (seconds * 1000L);
-        if (newTime < 0) newTime = 0;
-        mediaPlayerComponent.mediaPlayer().controls().setTime(newTime);
-    }
-
-
-    private void loadMovies() {
-        try {
-            URL url = new URL("http://localhost:8080/api/movies");
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("GET");
-            conn.connect();
-
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
-                String json = reader.lines().collect(Collectors.joining());
-                ObjectMapper mapper = new ObjectMapper();
-                mapper.registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
-                mapper.disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-                mapper.disable(com.fasterxml.jackson.databind.MapperFeature.REQUIRE_HANDLERS_FOR_JAVA8_TIMES);
-                movieList = mapper.readValue(json, new TypeReference<List<MovieDto>>() {});;
-                movieListModel.clear();
-                for (MovieDto m : movieList) {
-                    movieListModel.addElement(m);
-                }
-            }
-
-        } catch (Exception e) {
-            JOptionPane.showMessageDialog(this, "Failed to load movies: " + e.getMessage());
-            e.printStackTrace();
+    public File showOpenDialog() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Select a video to upload");
+        if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+            return fileChooser.getSelectedFile();
         }
+        return null;
     }
 
-    private void playSelectedMovie() {
-        int index = movieListUI.getSelectedIndex();
-        if (index < 0 || movieList == null || movieList.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Please select a movie first.");
-            return;
-        }
-
-        MovieDto selected = movieList.get(index);
-        String streamUrl = "http://localhost:8080/api/" + selected.getId() + "/stream";
-        System.out.println("▶ Playing: " + selected.getTitle() + " (" + streamUrl + ")");
-        String[] options = {":network-caching=300"};
-        mediaPlayerComponent.mediaPlayer().media().play(streamUrl, options);
+    public String showInputDialog(String message, String title) {
+        return JOptionPane.showInputDialog(this, message, title, JOptionPane.PLAIN_MESSAGE);
     }
 
-//    private void startUploadWorker(File fileToUpload, String title) {
-//        // 1. Create a SwingWorker to do this on a background thread
-//        SwingWorker<String, Integer> worker = new SwingWorker<>() {
-//
-//            @Override
-//            protected String doInBackground() throws Exception {
-//                try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
-//                    HttpPost uploadPost = new HttpPost("http://localhost:8080/api/upload");
-//
-//                    // We need a custom entity to track progress
-//                    // (This is a simplified example; a real one would override writeTo)
-//                    HttpEntity multipartEntity = MultipartEntityBuilder.create()
-//                            .addBinaryBody("file", fileToUpload, ContentType.DEFAULT_BINARY, fileToUpload.getName())
-//                            .addTextBody("title", title)
-//                            .addTextBody("resolution", "720p")
-//                            .build();
-//
-//                    // To track progress, you'd wrap 'multipartEntity' in a custom
-//                    // class that overrides 'writeTo(OutputStream)' and calls
-//                    // publish() with the percentage.
-//
-//                    // For now, let's just simulate it:
-//                    for (int i = 0; i <= 100; i += 10) {
-//                        Thread.sleep(200); // Simulate upload chunk
-//                        publish(i); // Send progress to the process() method
-//                    }
-//
-//                    // This is where you'd actually execute the request:
-//                    // CloseableHttpResponse response = httpClient.execute(uploadPost);
-//                    // ... handle response ...
-//
-//                    return "Upload complete"; // Return a result
-//                }
-//            }
-//
-//            @Override
-//            protected void process(List<Integer> chunks) {
-//                // This runs on the UI thread
-//                int latestProgress = chunks.get(chunks.size() - 1);
-//                uploadProgressBar.setValue(latestProgress); // Update the JProgressBar
-//            }
-//
-//            @Override
-//            protected void done() {
-//                try {
-//                    String result = get();
-//                    JOptionPane.showMessageDialog(null, result);
-//                    uploadProgressBar.setValue(100);
-//                } catch (Exception e) {
-//                    e.printStackTrace();
-//                    JOptionPane.showMessageDialog(null, "Upload failed");
-//                    uploadProgressBar.setValue(0);
-//                }
-//            }
-//        };
-//        worker.execute();
-//    }
+    public EmbeddedMediaPlayerComponent getMediaPlayer() {
+        return mediaPlayerComponent;
+    }
+
+    public MovieDto getSelectedMovieFromList() {
+        return movieListUI.getSelectedValue();
+    }
+
+    public String getSearchQuery() {
+        return searchField.getText().trim();
+    }
+
     public void release() {
         mediaPlayerComponent.release();
     }
-
-
-
 }
