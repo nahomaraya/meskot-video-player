@@ -48,26 +48,58 @@ public class EncodingService {
         }
     }
 
-    public File encode(File input, String resolution, String outputFormat)
+    // In EncodingService.java
+
+    public File encode(File input, String resolution, String outputFormat, String codec)
             throws IOException, FrameGrabber.Exception, FrameRecorder.Exception {
+
         String baseName = input.getName().substring(0, input.getName().lastIndexOf('.'));
-        File output = new File(input.getParentFile(), baseName + "_" + resolution + "." + outputFormat);
+        File output = new File(input.getParentFile(), baseName + "_" + resolution + "_" + codec + "." + outputFormat);
 
         // Initialize grabber
         FFmpegFrameGrabber grabber = new FFmpegFrameGrabber(input);
         grabber.start();
 
+        // --- 1. Fix Aspect Ratio ---
+        // Get the target height from the resolution string (e.g., "720p" -> 720)
+        int targetHeight = Integer.parseInt(resolution.replaceAll("p", ""));
+        double aspectRatio = (double) grabber.getImageWidth() / grabber.getImageHeight();
+
+        // Calculate new width to maintain aspect ratio
+        // Must be divisible by 2 for many codecs
+        int targetWidth = (int) (targetHeight * aspectRatio);
+        if (targetWidth % 2 != 0) {
+            targetWidth++;
+        }
+
         // Setup recorder
         FFmpegFrameRecorder recorder = new FFmpegFrameRecorder(output,
-                getWidthForResolution(grabber.getImageWidth(), resolution),
-                getHeightForResolution(grabber.getImageHeight(), resolution),
+                targetWidth,
+                targetHeight,
                 grabber.getAudioChannels());
+
         recorder.setFormat(outputFormat);
-        recorder.setVideoCodec(avcodec.AV_CODEC_ID_H264);
-        recorder.setAudioCodec(avcodec.AV_CODEC_ID_AAC);
+
+        // --- 2. Set the Codec ---
+        if ("h265".equalsIgnoreCase(codec)) {
+            recorder.setVideoCodec(avcodec.AV_CODEC_ID_HEVC);
+            recorder.setAudioCodec(avcodec.AV_CODEC_ID_AAC); // AAC is fine for H.265
+        } else {
+            // Default H.264
+            recorder.setVideoCodec(avcodec.AV_CODEC_ID_H264);
+            recorder.setAudioCodec(avcodec.AV_CODEC_ID_AAC);
+        }
+
         recorder.setFrameRate(grabber.getFrameRate());
-        recorder.setVideoBitrate(grabber.getVideoBitrate());
-        recorder.setPixelFormat(avutil.AV_PIX_FMT_YUV420P);
+        recorder.setPixelFormat(avutil.AV_PIX_FMT_YUV420P); // Good default for compatibility
+
+        // --- 3. Fix Bitrate ---
+        // REMOVE: recorder.setVideoBitrate(grabber.getVideoBitrate());
+
+        // USE THIS INSTEAD:
+        // A CRF (Constant Rate Factor) of 23 is a good balance of quality/size.
+        // Lower is better quality (e.g., 18). Higher is worse quality (e.g., 28).
+        recorder.setVideoOption("crf", "23");
 
         recorder.start();
 
@@ -77,8 +109,12 @@ public class EncodingService {
         }
 
         recorder.stop();
+        recorder.release(); // Good practice to release resources
         grabber.stop();
+        grabber.release();
 
         return output;
     }
+
+// You can now delete your getWidthForResolution and getHeightForResolution methods
    }

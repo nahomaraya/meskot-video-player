@@ -8,6 +8,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.neu.finalproject.meskot.dto.MovieDto;
 import com.neu.finalproject.meskot.model.Movie;
 import lombok.Getter;
+import org.apache.hc.client5.http.entity.mime.MultipartEntityBuilder;
 import uk.co.caprica.vlcj.factory.MediaPlayerFactory;
 import uk.co.caprica.vlcj.player.base.MediaPlayer;
 import uk.co.caprica.vlcj.player.component.EmbeddedMediaPlayerComponent;
@@ -23,6 +24,15 @@ import java.net.URL;
 import java.net.URLEncoder;
 import java.util.stream.Collectors;
 import java.util.List;
+import org.apache.http.HttpEntity;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.ContentType;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import java.io.File;
+
+
 public class VideoPlayerUI extends JFrame {
     // Simple inner model class for deserialization
 //    @Getter
@@ -39,6 +49,8 @@ public class VideoPlayerUI extends JFrame {
     private final JSlider volumeSlider;
     private final DefaultListModel<MovieDto> movieListModel;
     private JList<MovieDto> movieListUI;
+    private JButton downloadButton = new JButton("Download");
+    private JProgressBar uploadProgressBar;
 
 
 
@@ -73,7 +85,7 @@ public class VideoPlayerUI extends JFrame {
         JPanel topPanel = new JPanel(new FlowLayout());
         searchField = new JTextField(20);
         JButton searchButton = new JButton("Search");
-        JButton downloadButton = new JButton("Download");
+
 
         topPanel.add(new JLabel("Search:"));
         topPanel.add(searchField);
@@ -129,9 +141,11 @@ public class VideoPlayerUI extends JFrame {
         });
 
         downloadButton.addActionListener(e -> {
-            int index = movieDropdown.getSelectedIndex();
+            int index = movieDropdown.getSelectedIndex(); // Or get from JList
             if (index >= 0 && movieList != null && index < movieList.size()) {
-                downloadMovie(movieList.get(index).getId());
+                // We don't call downloadMovie directly anymore
+                // We start the background worker
+                startDownloadWorker(movieList.get(index));
             }
         });
 
@@ -166,42 +180,85 @@ public class VideoPlayerUI extends JFrame {
         }
     }
 
-    private void downloadMovie(Long movieId) {
-        try {
-            URL url = new URL("http://localhost:8080/api/" + movieId + "/download");
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("GET");
+    private void startDownloadWorker(MovieDto movie) {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setSelectedFile(new File(movie.getTitle() + ".mp4"));
 
-            if (conn.getResponseCode() == 200) {
-                String disposition = conn.getHeaderField("Content-Disposition");
-                String fileName = "downloaded_video.mp4";
-                if (disposition != null && disposition.contains("filename=")) {
-                    fileName = disposition.split("filename=")[1].replace("\"", "");
-                }
+        if (chooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+            File outputFile = chooser.getSelectedFile();
 
-                JFileChooser chooser = new JFileChooser();
-                chooser.setSelectedFile(new File(fileName));
-                if (chooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
-                    try (InputStream in = conn.getInputStream();
-                         FileOutputStream out = new FileOutputStream(chooser.getSelectedFile())) {
-                        byte[] buffer = new byte[8192];
-                        int bytesRead;
-                        while ((bytesRead = in.read(buffer)) != -1) {
-                            out.write(buffer, 0, bytesRead);
+            // Disable the download button while working
+            downloadButton.setEnabled(false);
+            downloadButton.setText("Downloading...");
+
+            // SwingWorker<Void, Void> means:
+            // Void: doInBackground() returns nothing
+            // Void: process() is not used
+            SwingWorker<Void, Void> worker = new SwingWorker<>() {
+
+                @Override
+                protected Void doInBackground() throws Exception {
+                    URL url = new URL("http://localhost:8080/api/" + movie.getId() + "/download");
+                    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                    conn.setRequestMethod("GET");
+
+                    if (conn.getResponseCode() == 200) {
+                        long fileSize = conn.getContentLengthLong();
+
+                        // This creates a popup progress bar!
+                        ProgressMonitorInputStream pmis = new ProgressMonitorInputStream(
+                                VideoPlayerUI.this,
+                                "Downloading " + movie.getTitle(),
+                                conn.getInputStream()
+                        );
+
+                        // Set progress bar max value
+                        if (fileSize != -1) {
+                            pmis.getProgressMonitor().setMaximum((int) fileSize);
                         }
-                    }
-                    JOptionPane.showMessageDialog(this, "Downloaded successfully!");
-                }
-            } else {
-                JOptionPane.showMessageDialog(this, "Failed to download file: " + conn.getResponseMessage());
-            }
 
-        } catch (Exception e) {
-            JOptionPane.showMessageDialog(this, "Error downloading file: " + e.getMessage());
-            e.printStackTrace();
+                        try (InputStream in = new BufferedInputStream(pmis);
+                             FileOutputStream out = new FileOutputStream(outputFile)) {
+
+                            byte[] buffer = new byte[8192];
+                            int bytesRead;
+                            while ((bytesRead = in.read(buffer)) != -1) {
+                                out.write(buffer, 0, bytesRead);
+                            }
+                        }
+                    } else {
+                        throw new IOException("Server responded with: " + conn.getResponseMessage());
+                    }
+                    return null;
+                }
+
+                @Override
+                protected void done() {
+                    try {
+                        // get() will re-throw any exception from doInBackground()
+                        get();
+                        JOptionPane.showMessageDialog(VideoPlayerUI.this,
+                                "Downloaded successfully!",
+                                "Download Complete",
+                                JOptionPane.INFORMATION_MESSAGE);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                        JOptionPane.showMessageDialog(VideoPlayerUI.this,
+                                "Error downloading file: " + e.getMessage(),
+                                "Download Failed",
+                                JOptionPane.ERROR_MESSAGE);
+                    } finally {
+                        // Re-enable the button
+                        downloadButton.setEnabled(true);
+                        downloadButton.setText("Download");
+                    }
+                }
+            };
+
+            // This starts the worker on a new thread
+            worker.execute();
         }
     }
-
     private void onPlay(ActionEvent event) {
         int index = movieDropdown.getSelectedIndex();
         if (index < 0 || movieList == null) return;
@@ -259,6 +316,63 @@ public class VideoPlayerUI extends JFrame {
         mediaPlayerComponent.mediaPlayer().media().play(streamUrl, options);
     }
 
+//    private void startUploadWorker(File fileToUpload, String title) {
+//        // 1. Create a SwingWorker to do this on a background thread
+//        SwingWorker<String, Integer> worker = new SwingWorker<>() {
+//
+//            @Override
+//            protected String doInBackground() throws Exception {
+//                try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
+//                    HttpPost uploadPost = new HttpPost("http://localhost:8080/api/upload");
+//
+//                    // We need a custom entity to track progress
+//                    // (This is a simplified example; a real one would override writeTo)
+//                    HttpEntity multipartEntity = MultipartEntityBuilder.create()
+//                            .addBinaryBody("file", fileToUpload, ContentType.DEFAULT_BINARY, fileToUpload.getName())
+//                            .addTextBody("title", title)
+//                            .addTextBody("resolution", "720p")
+//                            .build();
+//
+//                    // To track progress, you'd wrap 'multipartEntity' in a custom
+//                    // class that overrides 'writeTo(OutputStream)' and calls
+//                    // publish() with the percentage.
+//
+//                    // For now, let's just simulate it:
+//                    for (int i = 0; i <= 100; i += 10) {
+//                        Thread.sleep(200); // Simulate upload chunk
+//                        publish(i); // Send progress to the process() method
+//                    }
+//
+//                    // This is where you'd actually execute the request:
+//                    // CloseableHttpResponse response = httpClient.execute(uploadPost);
+//                    // ... handle response ...
+//
+//                    return "Upload complete"; // Return a result
+//                }
+//            }
+//
+//            @Override
+//            protected void process(List<Integer> chunks) {
+//                // This runs on the UI thread
+//                int latestProgress = chunks.get(chunks.size() - 1);
+//                uploadProgressBar.setValue(latestProgress); // Update the JProgressBar
+//            }
+//
+//            @Override
+//            protected void done() {
+//                try {
+//                    String result = get();
+//                    JOptionPane.showMessageDialog(null, result);
+//                    uploadProgressBar.setValue(100);
+//                } catch (Exception e) {
+//                    e.printStackTrace();
+//                    JOptionPane.showMessageDialog(null, "Upload failed");
+//                    uploadProgressBar.setValue(0);
+//                }
+//            }
+//        };
+//        worker.execute();
+//    }
     public void release() {
         mediaPlayerComponent.release();
     }

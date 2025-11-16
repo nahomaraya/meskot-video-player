@@ -14,6 +14,8 @@ import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import com.github.luben.zstd.ZstdInputStream;
 import org.springframework.core.io.InputStreamResource;
+import org.springframework.scheduling.annotation.Async;
+import java.util.concurrent.CompletableFuture;
 
 import java.io.*;
 import java.net.MalformedURLException;
@@ -108,10 +110,10 @@ public class MovieService implements MovieServiceImpl {
             File file = moviePath.toFile();
             File streamFile = file;
 
-            // ✅ Decompress if needed
-            if (file.getName().endsWith(".zst")) {
-                streamFile = compressionService.decompressZst(file);
-            }
+//            // ✅ Decompress if needed
+//            if (file.getName().endsWith(".zst")) {
+//                streamFile = compressionService.decompressZst(file);
+//            }
 
             return buildStreamingResponse(streamFile, rangeHeader);
         } catch (Exception e) {
@@ -119,6 +121,8 @@ public class MovieService implements MovieServiceImpl {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
+
+    // In MovieService.java
 
     private ResponseEntity<Resource> buildStreamingResponse(File file, String rangeHeader) throws IOException {
         long fileLength = file.length();
@@ -132,7 +136,11 @@ public class MovieService implements MovieServiceImpl {
                 if (ranges.length > 1 && !ranges[1].isEmpty()) {
                     rangeEnd = Long.parseLong(ranges[1]);
                 }
-            } catch (NumberFormatException ignored) {}
+            } catch (NumberFormatException ignored) {
+                // Malformed range, just ignore and serve full content or default range
+                rangeStart = 0;
+                rangeEnd = fileLength - 1;
+            }
         }
 
         if (rangeEnd > fileLength - 1) {
@@ -141,15 +149,21 @@ public class MovieService implements MovieServiceImpl {
 
         long contentLength = rangeEnd - rangeStart + 1;
 
-        // ✅ Seek to range start
-        RandomAccessFile raf = new RandomAccessFile(file, "r");
+        // Make 'raf' final so it can be accessed by the anonymous inner class
+        final RandomAccessFile raf = new RandomAccessFile(file, "r");
         raf.seek(rangeStart);
 
-        // ✅ Limit read to requested range
+        //Create an InputStream that also closes 'raf' when it is closed
         InputStream inputStream = new BufferedInputStream(new FileInputStream(raf.getFD())) {
             @Override
             public int available() throws IOException {
                 return (int) contentLength;
+            }
+            @Override
+            public void close() throws IOException {
+                super.close();
+                raf.close();
+                // System.out.println("Closed raf"); // For debugging
             }
         };
 
@@ -161,18 +175,29 @@ public class MovieService implements MovieServiceImpl {
         headers.setContentLength(contentLength);
         headers.setContentType(MediaType.valueOf("video/mp4"));
 
-        HttpStatus status = (rangeHeader == null) ? HttpStatus.OK : HttpStatus.PARTIAL_CONTENT;
-
+        HttpStatus status = (rangeHeader == "not-allowed") ? HttpStatus.OK : HttpStatus.PARTIAL_CONTENT;
+        if (rangeStart >= fileLength) {
+            status = HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE;
+            headers.add("Content-Range", "bytes */" + fileLength);
+            return new ResponseEntity<>(null, headers, status);
+        }
         return new ResponseEntity<>(resource, headers, status);
     }
 
-    public Movie handleUpload(File uploadedFile, String title, String versionResolution) throws Exception {
+    @Async("encodingTaskExecutor")
+    public void handleUpload(File uploadedFile, String title, String versionResolution) throws Exception {
         // 1. Encode to versions
-        File encoded720 =  encodingService.encode(uploadedFile, versionResolution, "mp4");
+        System.out.println(versionResolution);
+        File encoded720 =  encodingService.encode(
+                uploadedFile,
+                versionResolution, // "720p"
+                "mp4",
+                "h265" // <-- Use the new codec
+        );
         // 2. Compress version
-        File compressed = compressionService.compress(encoded720);
+//        File compressed = compressionService.compress(encoded720);
         // 3. Store in object store
-        String storagePath = localStorageService.store(compressed, "movies/" + title.getClass().getName() +"/"  + compressed.getName());
+        String storagePath = localStorageService.store(encoded720, "movies/" + title.getClass().getName() +"/"  + encoded720.getName());
         // Save Movie entity
         Movie movie = new Movie();
         movie.setTitle(title);
@@ -184,11 +209,12 @@ public class MovieService implements MovieServiceImpl {
         MovieMetadata meta = new MovieMetadata();
         meta.setMovie(movie);
         meta.setResolution(versionResolution);
-        meta.setSizeInBytes(compressed.length());
+        meta.setSizeInBytes(encoded720.length());
         meta.setFormat("mp4");
         meta.setDuration(0.0); // Optional: calculate via JavaCV if needed
         movieMetadataRepository.save(meta);
-        return movie;
+        System.out.println("Finished background encoding for: " + title);
+        uploadedFile.delete();
     }
 }
 

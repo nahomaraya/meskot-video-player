@@ -112,8 +112,13 @@ public class Controller {
             @Parameter(description = "Title of the video")
             @RequestParam(defaultValue = "Sample Video") String title,
 
-            @Parameter(description = "Resolution of the video")
-            @RequestParam(defaultValue = "720p") String resolution
+            @Parameter(
+                    description = "Resolution of the video",
+                    schema = @Schema(type = "string", example = "720p", allowableValues = {
+                            "240p", "360p", "480p", "720p", "1080p"
+                    })
+            )
+            String resolution
     ) {
         try {
             // Save temp file
@@ -121,9 +126,9 @@ public class Controller {
             file.transferTo(tempFile);
 
             // Process with MovieService
-            Movie movie = movieService.handleUpload(tempFile, title, resolution);
+             movieService.handleUpload(tempFile, title, resolution);
 
-            return "Uploaded successfully! Stored at: " + movie.getFilePath();
+            return "Uploaded successfully!";
         } catch (Exception e) {
             e.printStackTrace();
             return "Upload failed: " + e.getMessage();
