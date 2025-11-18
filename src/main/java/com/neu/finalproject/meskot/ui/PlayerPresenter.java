@@ -8,6 +8,8 @@ import com.neu.finalproject.meskot.ui.VideoPlayerUI;
 
 import javax.swing.*;
 import java.io.File;
+import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -138,6 +140,26 @@ public class PlayerPresenter {
             return;
         }
         onMovieSelected(selected);
+    }
+
+    public void onOpenLocalVideo() {
+        // 1. Ask the view to show a file chooser specifically for opening files
+        File file = view.showLocalVideoDialog();
+
+        if (file != null) {
+            view.showPage(VideoPlayerUI.PAGE_PLAYER);
+            MovieDto localMovie = new MovieDto();
+            localMovie.setId(-1L); // Placeholder ID
+            localMovie.setTitle(file.getName() + " (Local File)");
+            localMovie.setUploadedDate(LocalDateTime.now());
+
+            // 4. Update the sidebar list specifically for this local session
+            view.updatePlayerMovieList(Collections.singletonList(localMovie));
+            String mediaPath = file.getAbsolutePath();
+            System.out.println("Playing Local File: " + mediaPath);
+
+            view.getMediaPlayer().mediaPlayer().media().play(mediaPath);
+        }
     }
 
     public void onSkip(int seconds) {

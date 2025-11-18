@@ -34,6 +34,7 @@ public class VideoPlayerUI extends JFrame {
     // --- Grokpedia Color Palette ---
     private static final Color DARK_BG = new Color(15, 15, 20);
     private static final Color CARD_BG = new Color(25, 25, 35);
+    private static final Color GREY_BG = new Color(196,195,200);
     private static final Color ACCENT_PURPLE = new Color(147, 51, 234);
     private static final Color ACCENT_BLUE = new Color(59, 130, 246);
     private static final Color TEXT_PRIMARY = new Color(240, 240, 245);
@@ -45,8 +46,13 @@ public class VideoPlayerUI extends JFrame {
     private final EmbeddedMediaPlayerComponent mediaPlayerComponent;
     private final JList<MovieDto> playerMovieListUI;
     private final DefaultListModel<MovieDto> playerMovieListModel;
+
+    // Search Result List
     private final JList<MovieDto> mainMovieListUI;
     private final DefaultListModel<MovieDto> mainMovieListModel;
+
+    // Library List (New Component sharing same model)
+    private final JList<MovieDto> libraryMovieListUI;
 
     private final JTextField mainSearchField;
     private final JSlider volumeSlider;
@@ -70,6 +76,9 @@ public class VideoPlayerUI extends JFrame {
         setSize(1280, 800);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
+        // --- ADDED: Menu Bar ---
+        setJMenuBar(createMenuBar());
+
         mainCardLayout = new CardLayout();
         mainPanel = new JPanel(mainCardLayout);
 
@@ -79,11 +88,20 @@ public class VideoPlayerUI extends JFrame {
         playerMovieListUI = new JList<>(playerMovieListModel);
         playerMovieListUI.setCellRenderer(new MovieCellRenderer());
 
+        // Data Model (Shared)
         mainMovieListModel = new DefaultListModel<>();
+
+        // List 1: Search Results Page
         mainMovieListUI = new JList<>(mainMovieListModel);
         mainMovieListUI.setCellRenderer(new MovieCellRenderer());
         mainMovieListUI.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         mainMovieListUI.setLayoutOrientation(JList.VERTICAL);
+
+        // List 2: Library Page (Fix: Create separate JList sharing same model)
+        libraryMovieListUI = new JList<>(mainMovieListModel);
+        libraryMovieListUI.setCellRenderer(new MovieCellRenderer());
+        libraryMovieListUI.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        libraryMovieListUI.setLayoutOrientation(JList.VERTICAL);
 
         mainSearchField = new JTextField(40);
         volumeSlider = new JSlider(0, 100, 80);
@@ -106,6 +124,73 @@ public class VideoPlayerUI extends JFrame {
         add(mainPanel);
     }
 
+    // --- NEW: Menu Bar Creation ---
+    private JMenuBar createMenuBar() {
+        JMenuBar menuBar = new JMenuBar();
+        menuBar.setBackground(DARK_BG);
+        menuBar.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, BORDER_COLOR));
+
+        // --- File Menu ---
+        JMenu fileMenu = new JMenu("File");
+        fileMenu.setForeground(TEXT_PRIMARY);
+        fileMenu.setFont(new Font("Inter", Font.PLAIN, 14));
+
+        JMenuItem openItem = new JMenuItem("Open Video File...");
+        styleMenuItem(openItem);
+        // Action listener added in attachPresenter or inline if presenter is ready
+        openItem.addActionListener(e -> {
+            if(presenter != null) presenter.onOpenLocalVideo();
+        });
+
+        JMenuItem exitItem = new JMenuItem("Exit");
+        styleMenuItem(exitItem);
+        exitItem.addActionListener(e -> System.exit(0));
+
+        fileMenu.add(openItem);
+        fileMenu.addSeparator();
+        fileMenu.add(exitItem);
+
+        // --- Navigate Menu ---
+        JMenu navMenu = new JMenu("Navigate");
+        navMenu.setForeground(TEXT_PRIMARY);
+        navMenu.setFont(new Font("Inter", Font.PLAIN, 14));
+
+        JMenuItem searchItem = new JMenuItem("Search Home");
+        styleMenuItem(searchItem);
+        searchItem.addActionListener(e -> {
+            if(presenter != null) presenter.onNavigate(PAGE_SEARCH);
+        });
+
+        JMenuItem libraryItem = new JMenuItem("Full Library");
+        styleMenuItem(libraryItem);
+        libraryItem.addActionListener(e -> {
+            if(presenter != null) presenter.onLoadLibrary();
+        });
+
+        JMenuItem uploadItem = new JMenuItem("Upload Wizard");
+        styleMenuItem(uploadItem);
+        uploadItem.addActionListener(e -> {
+            if(presenter != null) presenter.onNavigate(PAGE_UPLOAD);
+        });
+
+        navMenu.add(searchItem);
+        navMenu.add(libraryItem);
+        navMenu.add(uploadItem);
+
+        menuBar.add(fileMenu);
+        menuBar.add(navMenu);
+
+        return menuBar;
+    }
+
+    private void styleMenuItem(JMenuItem item) {
+        item.setBackground(CARD_BG);
+        item.setForeground(TEXT_PRIMARY);
+        item.setFont(new Font("Inter", Font.PLAIN, 14));
+        item.setBorder(new EmptyBorder(5, 10, 5, 10));
+        item.setOpaque(true);
+    }
+
     // --- Page Factory Methods ---
 
     private JPanel createSearchPage() {
@@ -113,22 +198,15 @@ public class VideoPlayerUI extends JFrame {
         page.setBackground(DARK_BG);
         GridBagConstraints gbc = new GridBagConstraints();
 
-        // --- Hero Title with Gradient Effect (simulated with shadow) ---
+        // --- Hero Title ---
         JLabel title = new JLabel("<html><div style='text-align: center;'>" +
-                "<span style='font-size: 72px; font-weight: 900; letter-spacing: -2px;'>Meskot</span><br>" +
-                "<span style='font-size: 36px; font-weight: 300; color: #9CA3AF;'>Cinema</span>" +
+                "<span style='font-size: 72px; font-weight: 900; letter-spacing: -2px;'>Meskot Video Player</span><br>" +
                 "</div></html>");
         title.setFont(new Font("SF Pro Display", Font.BOLD, 72));
         title.setForeground(TEXT_PRIMARY);
         title.setHorizontalAlignment(SwingConstants.CENTER);
 
-        // --- Subtitle ---
-        JLabel subtitle = new JLabel("Discover and stream your favorite movies");
-        subtitle.setFont(new Font("Inter", Font.PLAIN, 18));
-        subtitle.setForeground(TEXT_SECONDARY);
-        subtitle.setHorizontalAlignment(SwingConstants.CENTER);
-
-        // --- Custom Search Field with Grokpedia styling ---
+        // --- Custom Search Field ---
         RoundedSearchField searchField = new RoundedSearchField();
         searchField.setPreferredSize(new Dimension(700, 60));
         searchField.setFont(new Font("Inter", Font.PLAIN, 18));
@@ -140,7 +218,6 @@ public class VideoPlayerUI extends JFrame {
                 BorderFactory.createEmptyBorder(10, 20, 10, 20)
         ));
 
-        // Replace the old mainSearchField with this custom one
         mainSearchField.setPreferredSize(new Dimension(700, 60));
         mainSearchField.setFont(new Font("Inter", Font.PLAIN, 18));
         mainSearchField.setForeground(TEXT_PRIMARY);
@@ -151,7 +228,7 @@ public class VideoPlayerUI extends JFrame {
                 BorderFactory.createEmptyBorder(10, 20, 10, 20)
         ));
 
-        // --- Action Buttons with Gradient Style ---
+        // --- Action Buttons ---
         JButton searchButton = createGrokButton("Search Movies", true);
         JButton uploadNavButton = createGrokButton("Upload Movie", false);
         JButton libraryNavButton = createGrokButton("View Full Library", false);
@@ -162,10 +239,6 @@ public class VideoPlayerUI extends JFrame {
         gbc.insets = new Insets(20, 20, 10, 20);
         gbc.gridy = 0;
         page.add(title, gbc);
-
-        gbc.gridy = 1;
-        gbc.insets = new Insets(0, 20, 30, 20);
-        page.add(subtitle, gbc);
 
         gbc.gridy = 2;
         gbc.gridwidth = 1;
@@ -193,7 +266,7 @@ public class VideoPlayerUI extends JFrame {
 
         JPanel actionButtonsPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 20, 0));
         actionButtonsPanel.setBackground(DARK_BG);
-        actionButtonsPanel.add(libraryNavButton); // <-- ADDED LIBRARY BUTTON
+        actionButtonsPanel.add(libraryNavButton);
         actionButtonsPanel.add(uploadNavButton);
 
         page.add(actionButtonsPanel, gbc);
@@ -235,8 +308,11 @@ public class VideoPlayerUI extends JFrame {
         homeButton.setPreferredSize(new Dimension(120, 40));
         topPanel.add(homeButton);
 
-        // Reuse mainMovieListUI and its model
-        JScrollPane scrollPane = new JScrollPane(mainMovieListUI);
+        // FIX: Use the separate libraryMovieListUI component
+        libraryMovieListUI.setBackground(CARD_BG);
+        libraryMovieListUI.setForeground(TEXT_PRIMARY);
+
+        JScrollPane scrollPane = new JScrollPane(libraryMovieListUI);
         scrollPane.getViewport().setBackground(CARD_BG);
         scrollPane.setBorder(BorderFactory.createLineBorder(BORDER_COLOR));
 
@@ -246,8 +322,18 @@ public class VideoPlayerUI extends JFrame {
         // Attach listeners
         homeButton.addActionListener(e -> presenter.onNavigate(PAGE_SEARCH));
 
+        // FIX: Add listener to library list so clicks work here too
+        libraryMovieListUI.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                if (evt.getClickCount() == 2) {
+                    presenter.onMovieSelected(libraryMovieListUI.getSelectedValue());
+                }
+            }
+        });
+
         return page;
     }
+
     // --- Helper: Create Grokpedia-style button ---
     private JButton createGrokButton(String text, boolean isPrimary) {
         JButton button = new JButton(text) {
@@ -539,8 +625,10 @@ public class VideoPlayerUI extends JFrame {
 
     public void updatePlayerMovieList(List<MovieDto> movies) {
         playerMovieListModel.clear();
-        for (MovieDto m : movies) {
-            playerMovieListModel.addElement(m);
+        if (movies != null) {
+            for (MovieDto m : movies) {
+                playerMovieListModel.addElement(m);
+            }
         }
     }
 
@@ -606,6 +694,16 @@ public class VideoPlayerUI extends JFrame {
     public File showOpenDialog() {
         JFileChooser fileChooser = new JFileChooser();
         fileChooser.setDialogTitle("Select a video to upload");
+        if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+            return fileChooser.getSelectedFile();
+        }
+        return null;
+    }
+
+    // --- NEW: Show Dialog Specifically for Local Playback ---
+    public File showLocalVideoDialog() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Open Video File for Playback");
         if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
             return fileChooser.getSelectedFile();
         }
