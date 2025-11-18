@@ -55,6 +55,29 @@ public class PlayerPresenter {
         }.execute();
     }
 
+    public void onLoadLibrary() {
+        view.showPage(VideoPlayerUI.PAGE_LIBRARY); // Navigate to the Library page
+
+        new SwingWorker<List<MovieDto>, Void>() {
+            @Override
+            protected List<MovieDto> doInBackground() throws Exception {
+                // Fetch ALL movies (no search query)
+                return apiService.getMovies();
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    // Cache the results and display them on the main list component
+                    currentMovieList = get();
+                    view.updateMainMovieList(currentMovieList);
+                } catch (Exception e) {
+                    view.showErrorMessage("Failed to load full library: " + e.getMessage());
+                }
+            }
+        }.execute();
+    }
+
     public void onSearch() {
         String query = view.getSearchQuery();
 

@@ -113,7 +113,7 @@ public class Controller {
             // 2. Create the job
             UploadJob job = new UploadJob();
             String jobId = UUID.randomUUID().toString();
-            job.setId(Long.valueOf(jobId));
+            job.setId(jobId);
             job.setStatus("PENDING");
             job.setProgress(0);
             uploadJobRepository.save(job);

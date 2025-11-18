@@ -57,6 +57,9 @@ public class EncodingService {
         File output = new File(input.getParentFile(), baseName + "_" + resolution + "_" + codec + "." + outputFormat);
 
         FFmpegFrameGrabber grabber = new FFmpegFrameGrabber(input);
+        grabber.setFormat("mp4"); // You can try setting the input format here if known
+        // Tell the grabber to grab frames in YUV420P format if possible
+        grabber.setPixelFormat(avutil.AV_PIX_FMT_YUV420P); // <--- ADD THIS LINE
         try {
             grabber.start();
 
@@ -78,8 +81,11 @@ public class EncodingService {
             try {
                 // --- (Your existing recorder setup) ---
                 recorder.setFormat(outputFormat);
+                // Inside EncodingService.java in the encode method
                 if ("h265".equalsIgnoreCase(codec)) {
-                    recorder.setVideoCodec(avcodec.AV_CODEC_ID_HEVC);
+                    recorder.setVideoCodec(avcodec.AV_CODEC_ID_H264);
+                    recorder.setVideoOption("preset", "medium"); // Example preset
+                    recorder.setVideoOption("tune", "film");     // Example tune
                     recorder.setAudioCodec(avcodec.AV_CODEC_ID_AAC);
                 } else {
                     recorder.setVideoCodec(avcodec.AV_CODEC_ID_H264);

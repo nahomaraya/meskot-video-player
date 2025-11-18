@@ -9,7 +9,7 @@ import lombok.Data;
 public class UploadJob {
 
     @Id
-    private Long id;
+    private String id;
 
     private String status; // e.g., PENDING, ENCODING, COMPLETED, FAILED
 

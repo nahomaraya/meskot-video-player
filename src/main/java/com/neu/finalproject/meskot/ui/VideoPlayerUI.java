@@ -2,6 +2,8 @@ package com.neu.finalproject.meskot.ui;
 
 import com.neu.finalproject.meskot.dto.MovieDto;
 import com.neu.finalproject.meskot.ui.PlayerPresenter;
+import lombok.Getter;
+import lombok.Setter;
 import uk.co.caprica.vlcj.player.component.EmbeddedMediaPlayerComponent;
 
 import javax.swing.*;
@@ -27,6 +29,7 @@ public class VideoPlayerUI extends JFrame {
     public static final String PAGE_LIST = "LIST";
     public static final String PAGE_PLAYER = "PLAYER";
     public static final String PAGE_UPLOAD = "UPLOAD";
+    public static final String PAGE_LIBRARY = "LIBRARY";
 
     // --- Grokpedia Color Palette ---
     private static final Color DARK_BG = new Color(15, 15, 20);
@@ -57,6 +60,8 @@ public class VideoPlayerUI extends JFrame {
     private JButton uploadNextButton;
     private JButton uploadPrevButton;
     private final JLabel uploadStepLabel;
+    @Getter
+    @Setter
     private File selectedUploadFile;
 
     // --- Constructor ---
@@ -96,6 +101,7 @@ public class VideoPlayerUI extends JFrame {
         mainPanel.add(createMovieListPage(), PAGE_LIST);
         mainPanel.add(createPlayerPage(), PAGE_PLAYER);
         mainPanel.add(createUploadPage(), PAGE_UPLOAD);
+        mainPanel.add(createLibraryPage(), PAGE_LIBRARY);
 
         add(mainPanel);
     }
@@ -148,6 +154,8 @@ public class VideoPlayerUI extends JFrame {
         // --- Action Buttons with Gradient Style ---
         JButton searchButton = createGrokButton("Search Movies", true);
         JButton uploadNavButton = createGrokButton("Upload Movie", false);
+        JButton libraryNavButton = createGrokButton("View Full Library", false);
+        libraryNavButton.setPreferredSize(new Dimension(200, 50));
 
         // --- Layout Assembly ---
         gbc.gridwidth = 2;
@@ -183,6 +191,13 @@ public class VideoPlayerUI extends JFrame {
         gbc.insets = new Insets(10, 20, 10, 20);
         page.add(uploadNavButton, gbc);
 
+        JPanel actionButtonsPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 20, 0));
+        actionButtonsPanel.setBackground(DARK_BG);
+        actionButtonsPanel.add(libraryNavButton); // <-- ADDED LIBRARY BUTTON
+        actionButtonsPanel.add(uploadNavButton);
+
+        page.add(actionButtonsPanel, gbc);
+
         // --- Footer Info ---
         JLabel footerLabel = new JLabel("Source code");
         footerLabel.setFont(new Font("Inter", Font.PLAIN, 12));
@@ -198,10 +213,41 @@ public class VideoPlayerUI extends JFrame {
         searchButton.addActionListener(e -> presenter.onSearch());
         mainSearchField.addActionListener(e -> presenter.onSearch());
         uploadNavButton.addActionListener(e -> presenter.onNavigate(PAGE_UPLOAD));
+        libraryNavButton.addActionListener(e -> presenter.onLoadLibrary());
 
         return page;
     }
 
+    private JPanel createLibraryPage() {
+        JPanel page = new JPanel(new BorderLayout(10, 10));
+        page.setBorder(new EmptyBorder(10, 10, 10, 10));
+        page.setBackground(DARK_BG);
+
+        JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 5));
+        topPanel.setBackground(DARK_BG);
+
+        JLabel libraryLabel = new JLabel("🎬 Full Movie Library");
+        libraryLabel.setForeground(TEXT_PRIMARY);
+        libraryLabel.setFont(new Font("Inter", Font.BOLD, 24));
+        topPanel.add(libraryLabel);
+
+        JButton homeButton = createGrokButton("Home", false);
+        homeButton.setPreferredSize(new Dimension(120, 40));
+        topPanel.add(homeButton);
+
+        // Reuse mainMovieListUI and its model
+        JScrollPane scrollPane = new JScrollPane(mainMovieListUI);
+        scrollPane.getViewport().setBackground(CARD_BG);
+        scrollPane.setBorder(BorderFactory.createLineBorder(BORDER_COLOR));
+
+        page.add(topPanel, BorderLayout.NORTH);
+        page.add(scrollPane, BorderLayout.CENTER);
+
+        // Attach listeners
+        homeButton.addActionListener(e -> presenter.onNavigate(PAGE_SEARCH));
+
+        return page;
+    }
     // --- Helper: Create Grokpedia-style button ---
     private JButton createGrokButton(String text, boolean isPrimary) {
         JButton button = new JButton(text) {
@@ -516,14 +562,6 @@ public class VideoPlayerUI extends JFrame {
             uploadPrevButton.setEnabled(false);
             uploadNextButton.setEnabled(false);
         }
-    }
-
-    public void setSelectedUploadFile(File file) {
-        this.selectedUploadFile = file;
-    }
-
-    public File getSelectedUploadFile() {
-        return this.selectedUploadFile;
     }
 
     public void showErrorMessage(String message) {
