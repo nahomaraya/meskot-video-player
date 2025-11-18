@@ -14,13 +14,17 @@ import java.util.TimerTask;
 
 /**
  * The Presenter (P in MVP).
- * This class is the "brain" of the UI. It handles all logic,
- * runs background tasks, and tells the View what to show.
+ * Expanded to manage navigation, multi-page logic, and the upload wizard.
  */
 public class PlayerPresenter {
 
     private final VideoPlayerUI view;
     private final MovieApiService apiService;
+
+    // --- STATE FIELDS ADDED TO RESOLVE ERRORS ---
+    private List<MovieDto> currentMovieList; // Cache the last list/search results
+    private String currentUploadStep = "STEP_1";
+    // --------------------------------------------
 
     public PlayerPresenter(VideoPlayerUI view, MovieApiService apiService) {
         this.view = view;
@@ -30,6 +34,8 @@ public class PlayerPresenter {
     // --- Actions Called by View ---
 
     public void loadInitialMovies() {
+        view.showPage(VideoPlayerUI.PAGE_SEARCH); // Start on the search page
+
         new SwingWorker<List<MovieDto>, Void>() {
             @Override
             protected List<MovieDto> doInBackground() throws Exception {
@@ -39,7 +45,9 @@ public class PlayerPresenter {
             @Override
             protected void done() {
                 try {
-                    view.updateMovieList(get());
+                    // Cache the results and display them on the main list page
+                    currentMovieList = get();
+                    view.updateMainMovieList(currentMovieList);
                 } catch (Exception e) {
                     view.showErrorMessage("Failed to load movies: " + e.getMessage());
                 }
@@ -49,6 +57,7 @@ public class PlayerPresenter {
 
     public void onSearch() {
         String query = view.getSearchQuery();
+
         new SwingWorker<List<MovieDto>, Void>() {
             @Override
             protected List<MovieDto> doInBackground() throws Exception {
@@ -62,7 +71,9 @@ public class PlayerPresenter {
             @Override
             protected void done() {
                 try {
-                    view.updateMovieList(get());
+                    currentMovieList = get(); // Cache the results
+                    view.updateMainMovieList(currentMovieList); // Corrected method name
+                    view.showPage(VideoPlayerUI.PAGE_LIST); // Show the list page
                 } catch (Exception e) {
                     view.showErrorMessage("Failed to search: " + e.getMessage());
                 }
@@ -70,17 +81,40 @@ public class PlayerPresenter {
         }.execute();
     }
 
-    public void onPlay() {
-        MovieDto selected = view.getSelectedMovieFromList();
-        if (selected == null) {
-            view.showInfoMessage("Please select a movie first.");
-            return;
-        }
-        // Building the URL is logic, so it stays in the Presenter
-        String streamUrl = apiService.getBaseUrl() + "/" + selected.getId() + "/stream";
-        System.out.println("▶ Playing: " + selected.getTitle() + " (" + streamUrl + ")");
+    public void onMovieSelected(MovieDto selectedMovie) {
+        if (selectedMovie == null) return;
+
+        // 1. Load the player page
+        view.showPage(VideoPlayerUI.PAGE_PLAYER);
+
+        // 2. Populate the side-list with the *current* context
+        view.updatePlayerMovieList(currentMovieList);
+
+        // 3. Start playing the selected movie
+        String streamUrl = apiService.getBaseUrl() + "/" + selectedMovie.getId() + "/stream";
+        System.out.println("▶ Playing: " + selectedMovie.getTitle() + " (" + streamUrl + ")");
         String[] options = {":network-caching=300"};
         view.getMediaPlayer().mediaPlayer().media().play(streamUrl, options);
+    }
+
+    public void onNavigate(String pageName) {
+        view.showPage(pageName);
+        if (VideoPlayerUI.PAGE_UPLOAD.equals(pageName)) {
+            // Reset wizard state and data when navigating to the Upload page
+            currentUploadStep = "STEP_1";
+            view.setUploadWizardPage(currentUploadStep);
+            view.setSelectedUploadFile(null);
+        }
+    }
+
+    public void onPlay() {
+        // Operates on the side list on the player page
+        MovieDto selected = view.getSelectedMovieFromList();
+        if (selected == null) {
+            view.showInfoMessage("Please select a movie from the list first.");
+            return;
+        }
+        onMovieSelected(selected);
     }
 
     public void onSkip(int seconds) {
@@ -105,17 +139,14 @@ public class PlayerPresenter {
         new SwingWorker<Void, Long>() {
             @Override
             protected Void doInBackground() throws Exception {
-                // The API service handles the download and uses the consumer to publish progress
                 apiService.downloadMovie(selected.getId(), outputFile,
-                        (bytes) -> publish(bytes) // Publish progress
+                        (bytes) -> publish(bytes)
                 );
                 return null;
             }
 
             @Override
             protected void process(List<Long> chunks) {
-                // Note: This gives bytes, not percent.
-                // For a real app, you'd get total size first to make a percentage.
                 long bytes = chunks.get(chunks.size() - 1);
                 view.setDownloadButtonState(false, String.format("Downloading... (%.2f MB)", bytes / (1024.0 * 1024.0)));
             }
@@ -134,23 +165,55 @@ public class PlayerPresenter {
         }.execute();
     }
 
-    public void onUpload() {
-        File fileToUpload = view.showOpenDialog();
-        if (fileToUpload == null) return; // User cancelled
+    // --- Upload Wizard Logic (Replaces old onUpload() and implements wizard steps) ---
 
-        String title = view.showInputDialog("Enter a title for the movie:", "Movie Title");
-        if (title == null || title.trim().isEmpty()) return; // User cancelled
+    public void onUploadSelectFile() {
+        File file = view.showOpenDialog();
+        if (file != null) {
+            view.setSelectedUploadFile(file);
+            // Auto-advance to next step
+            currentUploadStep = "STEP_2";
+            view.setUploadWizardPage(currentUploadStep);
+        }
+    }
 
-        view.setUploadButtonState(false);
-        view.setDownloadButtonState(false, "Download");
+    public void onUploadWizardPrevious() {
+        if ("STEP_2".equals(currentUploadStep)) {
+            currentUploadStep = "STEP_1";
+            view.setUploadWizardPage(currentUploadStep);
+        }
+    }
+
+    public void onUploadWizardNext(String title, String resolution) {
+        if ("STEP_1".equals(currentUploadStep)) {
+            view.showInfoMessage("Please select a file first.");
+        } else if ("STEP_2".equals(currentUploadStep)) {
+            // This is the "Upload" button click
+            if (title == null || title.trim().isEmpty()) {
+                view.showInfoMessage("Please enter a title.");
+                return;
+            }
+            File fileToUpload = view.getSelectedUploadFile();
+            if (fileToUpload == null) {
+                view.showInfoMessage("An error occurred. Please go back and re-select your file.");
+                return;
+            }
+
+            // Move to step 3 and start the upload worker
+            currentUploadStep = "STEP_3";
+            view.setUploadWizardPage(currentUploadStep);
+            startUploadWorker(fileToUpload, title, resolution);
+        }
+    }
+
+    private void startUploadWorker(File fileToUpload, String title, String resolution) {
         view.setUploadProgress("Uploading: 0%", 0, false);
 
         new SwingWorker<String, Integer>() {
             @Override
             protected String doInBackground() throws Exception {
-                // Call the API, which will publish progress via the callback
-                JobResponse job = apiService.startUpload(fileToUpload, title, "720p",
-                        (percent) -> publish(percent) // Publish progress
+                JobResponse job = apiService.startUpload(fileToUpload, title, resolution,
+                        (percent) -> publish(percent)
                 );
                 return job.getJobId();
             }
@@ -166,10 +229,10 @@ public class PlayerPresenter {
                 try {
                     String jobId = get();
                     view.setUploadProgress("Upload Complete. Encoding...", 0, true);
-                    startPollingWorker(jobId); // Start polling for encoding status
+                    startPollingWorker(jobId);
                 } catch (Exception e) {
-                    view.showErrorMessage("Upload failed: " + e.getMessage());
-                    resetUploadUI();
+                    view.showErrorMessage("Upload failed: Failure during upload: " + e.getMessage());
+                    onNavigate(VideoPlayerUI.PAGE_SEARCH);
                 }
             }
         }.execute();
@@ -177,6 +240,7 @@ public class PlayerPresenter {
 
     private void startPollingWorker(String jobId) {
         Timer poller = new Timer(true); // Use daemon thread
+
         poller.schedule(new TimerTask() {
             @Override
             public void run() {
@@ -194,13 +258,12 @@ public class PlayerPresenter {
                             case "COMPLETED":
                                 poller.cancel();
                                 view.hideUploadProgressAfterDelay("Encoding Complete!");
-                                resetUploadUI();
-                                loadInitialMovies(); // Refresh list
+                                onNavigate(VideoPlayerUI.PAGE_SEARCH); // Navigate user back to the home page
                                 break;
                             case "FAILED":
                                 poller.cancel();
                                 view.showErrorMessage("Encoding Failed: " + job.getErrorMessage());
-                                resetUploadUI();
+                                onNavigate(VideoPlayerUI.PAGE_SEARCH); // Navigate user back
                                 break;
                         }
                     });
@@ -209,15 +272,10 @@ public class PlayerPresenter {
                     poller.cancel();
                     SwingUtilities.invokeLater(() -> {
                         view.showErrorMessage("Error checking status: " + e.getMessage());
-                        resetUploadUI();
+                        onNavigate(VideoPlayerUI.PAGE_SEARCH);
                     });
                 }
             }
         }, 0, 2000); // Poll every 2 seconds
-    }
-
-    private void resetUploadUI() {
-        view.setUploadButtonState(true);
-        view.setDownloadButtonState(true, "Download");
     }
 }
