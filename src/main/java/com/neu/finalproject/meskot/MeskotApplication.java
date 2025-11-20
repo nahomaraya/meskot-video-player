@@ -34,7 +34,9 @@ public class MeskotApplication {
             view.setVisible(true);
 
             // 6. Tell the presenter to load the initial data
-            presenter.loadInitialMovies();
+            new Thread(() -> {
+                presenter.loadInitialMovies();
+            }).start();
         });
 	}
 

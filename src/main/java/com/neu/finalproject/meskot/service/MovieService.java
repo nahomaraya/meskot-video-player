@@ -46,8 +46,6 @@ public class MovieService implements MovieServiceImpl {
 
     private final CompressionService compressionService;
 
-    private final StorageService storageService;
-
     private final LocalStorageService localStorageService;
 
     private final CacheService cacheService;
@@ -233,6 +231,9 @@ public class MovieService implements MovieServiceImpl {
             movie.setTitle(title);
             movie.setFilePath(storagePath);
             movie.setUploadedDate(LocalDateTime.now());
+            movie.setCreatedAt(LocalDateTime.now());
+            movie.setStatus("ACTIVE");
+            movie.setSourceType("LOCAL");
             Movie savedMovie = movieRepository.save(movie); // Save and get the ID
 
             // 6. Save MovieMetaData

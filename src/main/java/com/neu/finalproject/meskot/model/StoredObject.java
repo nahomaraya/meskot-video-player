@@ -28,10 +28,13 @@ public class StoredObject {
     // location type: LOCAL or S3 etc
     private String locationType;
 
-    // human readable description or original filename
+    // human-readable description or original filename
     private String name;
 
     private LocalDateTime createdAt = LocalDateTime.now();
+
+    @Column(name = "bucket_name")
+    private String bucketName;
 
     // optional relation to MovieMetadata (if needed)
     @ManyToOne
