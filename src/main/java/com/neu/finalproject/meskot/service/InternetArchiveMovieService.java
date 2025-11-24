@@ -6,6 +6,10 @@ import com.neu.finalproject.meskot.model.Movie;
 import com.neu.finalproject.meskot.repository.MovieRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
@@ -48,7 +52,13 @@ public class InternetArchiveMovieService {
      */
     @Transactional
     public Movie importMovie(String itemIdentifier, Long uploaderId) throws Exception {
+        System.out.println("=== IMPORT MOVIE DEBUG ===");
+        System.out.println("Item Identifier: " + itemIdentifier);
+        System.out.println("Uploader ID: " + uploaderId);
+
         JsonNode metadata = fetchItemMetadata(itemIdentifier);
+
+        System.out.println("Metadata fetched successfully");
 
         Movie movie = new Movie();
         movie.setUploaderId(uploaderId);
@@ -57,46 +67,63 @@ public class InternetArchiveMovieService {
         movie.setStatus("ACTIVE");
         movie.setSourceType("INTERNET_ARCHIVE");
 
+        System.out.println("Movie object created with basic fields");
+
         // Extract metadata
         JsonNode metadataNode = metadata.get("metadata");
         if (metadataNode != null) {
+            System.out.println("Processing metadata node...");
+
             // Title
             if (metadataNode.has("title")) {
                 movie.setTitle(getStringValue(metadataNode.get("title")));
+                System.out.println("Title set: " + movie.getTitle());
             } else {
                 movie.setTitle(itemIdentifier);
+                System.out.println("Title set to identifier: " + itemIdentifier);
             }
 
             // Description
             if (metadataNode.has("description")) {
                 movie.setDescription(getStringValue(metadataNode.get("description")));
+                System.out.println("Description set");
             }
 
             // Year
             if (metadataNode.has("year")) {
                 try {
                     movie.setReleaseYear(Integer.parseInt(getStringValue(metadataNode.get("year"))));
+                    System.out.println("Year set: " + movie.getReleaseYear());
                 } catch (NumberFormatException e) {
                     // Try to extract year from date field
                     if (metadataNode.has("date")) {
                         String date = getStringValue(metadataNode.get("date"));
                         movie.setReleaseYear(extractYear(date));
+                        System.out.println("Year extracted from date: " + movie.getReleaseYear());
                     }
                 }
             } else if (metadataNode.has("date")) {
                 String date = getStringValue(metadataNode.get("date"));
                 movie.setReleaseYear(extractYear(date));
+                System.out.println("Year extracted from date: " + movie.getReleaseYear());
             }
 
             // Genre/Subject
             if (metadataNode.has("subject")) {
                 movie.setGenre(getStringValue(metadataNode.get("subject")));
+                System.out.println("Genre set: " + movie.getGenre());
             }
+        } else {
+            System.out.println("No metadata node found, using defaults");
+            movie.setTitle(itemIdentifier);
         }
 
         // Find the main video file
+        System.out.println("Looking for video files...");
         JsonNode filesNode = metadata.get("files");
+
         if (filesNode != null && filesNode.isArray()) {
+            System.out.println("Files array found with " + filesNode.size() + " files");
             String videoFile = null;
             String thumbnailFile = null;
             int duration = 0;
@@ -105,11 +132,14 @@ public class InternetArchiveMovieService {
                 String fileName = file.has("name") ? file.get("name").asText() : null;
                 String format = file.has("format") ? file.get("format").asText() : null;
 
+                System.out.println("  File: " + fileName + " | Format: " + format);
+
                 // Look for video file (prefer mp4, then other formats)
                 if (format != null && (format.contains("MPEG4") || format.contains("h.264") ||
                         format.contains("MPEG2") || format.equals("512Kb MPEG4"))) {
                     if (videoFile == null || fileName.endsWith(".mp4")) {
                         videoFile = fileName;
+                        System.out.println("    -> Selected as video file");
 
                         // Try to get duration
                         if (file.has("length")) {
@@ -127,15 +157,18 @@ public class InternetArchiveMovieService {
                 if (fileName != null && (fileName.endsWith("_thumbs.jpg") ||
                         (format != null && format.equals("Thumbnail")))) {
                     thumbnailFile = fileName;
+                    System.out.println("    -> Selected as thumbnail");
                 }
             }
 
             // Set file path (store as itemIdentifier/filename for retrieval)
             if (videoFile != null) {
                 movie.setFilePath(itemIdentifier + "/" + videoFile);
+                System.out.println("FilePath set to: " + movie.getFilePath());
             } else {
                 // No video file found, just use item identifier
                 movie.setFilePath(itemIdentifier);
+                System.out.println("No video file found, FilePath set to identifier: " + movie.getFilePath());
             }
 
             // Set thumbnail URL
@@ -145,19 +178,102 @@ public class InternetArchiveMovieService {
                 // Use default Internet Archive thumbnail
                 movie.setThumbnailUrl(String.format("https://archive.org/services/img/%s", itemIdentifier));
             }
+            System.out.println("ThumbnailURL set to: " + movie.getThumbnailUrl());
 
             movie.setDurationMinutes(duration > 0 ? duration : null);
+            if (duration > 0) {
+                System.out.println("Duration set to: " + duration + " minutes");
+            }
         } else {
             // No files metadata found, use item identifier as path
+            System.out.println("No files node found in metadata");
             movie.setFilePath(itemIdentifier);
             movie.setThumbnailUrl(String.format("https://archive.org/services/img/%s", itemIdentifier));
+            System.out.println("FilePath set to identifier: " + movie.getFilePath());
+            System.out.println("ThumbnailURL set to default");
         }
 
-        return movieRepository.save(movie);
+        System.out.println("About to save movie...");
+        System.out.println("Final check - FilePath: " + movie.getFilePath());
+        System.out.println("Final check - Title: " + movie.getTitle());
+        System.out.println("Final check - SourceType: " + movie.getSourceType());
+
+        Movie savedMovie = movieRepository.save(movie);
+        System.out.println("Movie saved successfully with ID: " + savedMovie.getId());
+        System.out.println("=========================");
+
+        return savedMovie;
     }
 
     /**
-     * Stream a movie from Internet Archive
+     * Stream a movie from Internet Archive with range support
+     * @param movieId The database movie ID
+     * @param rangeHeader The HTTP Range header for partial content
+     * @return ResponseEntity with proper headers for streaming
+     */
+    public ResponseEntity<Resource> streamMovieWithRange(Long movieId, String rangeHeader) throws Exception {
+        Movie movie = movieRepository.findById(movieId)
+                .orElseThrow(() -> new Exception("Movie not found"));
+
+        String filePath = movie.getFilePath();
+        String[] parts = filePath.split("/", 2);
+
+        if (parts.length != 2) {
+            throw new Exception("Invalid file path format for Internet Archive movie");
+        }
+
+        String itemIdentifier = parts[0];
+        String fileName = parts[1];
+
+        try {
+            // Get file size first
+            long fileLength = storageService.getContentLength(itemIdentifier, fileName);
+
+            long rangeStart = 0;
+            long rangeEnd = fileLength - 1;
+
+            // Parse range header
+            if (rangeHeader != null && rangeHeader.startsWith("bytes=")) {
+                String[] ranges = rangeHeader.substring(6).split("-");
+                try {
+                    rangeStart = Long.parseLong(ranges[0]);
+                    if (ranges.length > 1 && !ranges[1].isEmpty()) {
+                        rangeEnd = Long.parseLong(ranges[1]);
+                    }
+                } catch (NumberFormatException e) {
+                    // Invalid range, use defaults
+                }
+            }
+
+            if (rangeEnd > fileLength - 1) {
+                rangeEnd = fileLength - 1;
+            }
+
+            long contentLength = rangeEnd - rangeStart + 1;
+
+            // Build range header for Internet Archive request
+            String iaRangeHeader = "bytes=" + rangeStart + "-" + rangeEnd;
+
+            // Stream with range
+            Resource resource = storageService.streamFromArchiveWithRange(itemIdentifier, fileName, iaRangeHeader);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.add("Accept-Ranges", "bytes");
+            headers.add("Content-Range", "bytes " + rangeStart + "-" + rangeEnd + "/" + fileLength);
+            headers.setContentLength(contentLength);
+            headers.setContentType(MediaType.valueOf("video/mp4"));
+
+            HttpStatus status = (rangeHeader != null) ? HttpStatus.PARTIAL_CONTENT : HttpStatus.OK;
+
+            return new ResponseEntity<>(resource, headers, status);
+
+        } catch (Exception e) {
+            throw new Exception("Error streaming movie: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Stream a movie from Internet Archive (legacy method, downloads full file)
      * @param movieId The database movie ID
      * @return Resource for streaming
      */

@@ -48,6 +48,10 @@ public class MovieService implements MovieServiceImpl {
 
     private final LocalStorageService localStorageService;
 
+    private final InternetArchiveMovieService  iaMovieService;
+
+    private final SupabaseStorageService supabaseStorageService;
+
     private final CacheService cacheService;
 
     @Override
@@ -98,6 +102,7 @@ public class MovieService implements MovieServiceImpl {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
+
     public ResponseEntity<Resource> streamMovie(Long id, String rangeHeader) {
         Optional<Movie> movieOpt = movieRepository.findById(id);
         if (movieOpt.isEmpty()) {
@@ -105,28 +110,39 @@ public class MovieService implements MovieServiceImpl {
         }
 
         Movie movie = movieOpt.get();
-        Path moviePath = Paths.get(movie.getFilePath());
-        if (!Files.exists(moviePath)) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
-        }
+        String sourceType = movie.getSourceType();
 
         try {
-            File file = moviePath.toFile();
-            File streamFile = file;
+            // Route based on source type
+            if ("INTERNET_ARCHIVE".equals(sourceType)) {
+                // Stream from Internet Archive with range support
+                return iaMovieService.streamMovieWithRange(id, rangeHeader);
 
-//            // ✅ Decompress if needed
-//            if (file.getName().endsWith(".zst")) {
-//                streamFile = compressionService.decompressZst(file);
-//            }
+            } else if ("SUPABASE".equals(sourceType)) {
+                // Stream from Supabase S3
+                Resource resource = supabaseStorageService.loadAsResource(movie.getFilePath());
+                return ResponseEntity.ok()
+                        .contentType(MediaType.parseMediaType("video/mp4"))
+                        .header(HttpHeaders.CONTENT_DISPOSITION,
+                                "inline; filename=\"" + movie.getTitle() + ".mp4\"")
+                        .body(resource);
 
-            return buildStreamingResponse(streamFile, rangeHeader);
+            } else {
+                // LOCAL - existing logic with range support
+                Path moviePath = Paths.get(movie.getFilePath());
+                if (!Files.exists(moviePath)) {
+                    return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+                }
+
+                File file = moviePath.toFile();
+                return buildStreamingResponse(file, rangeHeader);
+            }
+
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
-
-    // In MovieService.java
 
     private ResponseEntity<Resource> buildStreamingResponse(File file, String rangeHeader) throws IOException {
         long fileLength = file.length();

@@ -4,17 +4,13 @@ import com.neu.finalproject.meskot.model.StoredObject;
 import com.neu.finalproject.meskot.repository.StoredObjectRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
-import software.amazon.awssdk.auth.credentials.AnonymousCredentialsProvider;
-import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.*;
 
 import java.io.*;
-import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -27,90 +23,134 @@ public class InternetArchiveStorageService implements StorageService {
     private String baseDir;
 
     private final StoredObjectRepository storedObjectRepository;
-    private S3Client s3Client;
 
     public InternetArchiveStorageService(StoredObjectRepository storedObjectRepository) {
         this.storedObjectRepository = storedObjectRepository;
     }
 
-    private S3Client getS3Client() {
-        if (s3Client == null) {
-            // Anonymous access for reading public files
-            s3Client = S3Client.builder()
-                    .endpointOverride(URI.create("https://s3.us.archive.org"))
-                    .region(Region.US_EAST_1)
-                    .credentialsProvider(AnonymousCredentialsProvider.create())
-                    .build();
+    /**
+     * Stream a file from Internet Archive with range support
+     * Supports partial content (HTTP 206) for video seeking
+     */
+    public Resource streamFromArchiveWithRange(String itemIdentifier, String fileKey, String rangeHeader) throws IOException {
+        try {
+            String encodedFileKey = java.net.URLEncoder.encode(fileKey, "UTF-8")
+                    .replace("+", "%20");
+
+            String url = String.format("https://archive.org/download/%s/%s", itemIdentifier, encodedFileKey);
+
+            System.out.println("Streaming with range from: " + url);
+            System.out.println("Range: " + rangeHeader);
+
+            java.net.URL downloadUrl = new java.net.URL(url);
+            java.net.HttpURLConnection connection = (java.net.HttpURLConnection) downloadUrl.openConnection();
+            connection.setRequestMethod("GET");
+            connection.setConnectTimeout(10000);
+            connection.setReadTimeout(60000);
+            connection.setInstanceFollowRedirects(true);
+
+            // Add Range header if provided
+            if (rangeHeader != null && !rangeHeader.isEmpty()) {
+                connection.setRequestProperty("Range", rangeHeader);
+            }
+
+            int responseCode = connection.getResponseCode();
+            System.out.println("Response code: " + responseCode);
+
+            // Accept both 200 (full content) and 206 (partial content)
+            if (responseCode == 200 || responseCode == 206) {
+                // Return the input stream directly without buffering entire file
+                InputStream inputStream = connection.getInputStream();
+                return new InputStreamResource(inputStream) {
+                    @Override
+                    public long contentLength() throws IOException {
+                        String contentLength = connection.getHeaderField("Content-Length");
+                        return contentLength != null ? Long.parseLong(contentLength) : -1;
+                    }
+                };
+            } else {
+                connection.disconnect();
+                throw new IOException("Failed to stream from Internet Archive. HTTP " + responseCode);
+            }
+
+        } catch (Exception e) {
+            throw new IOException("Error streaming from Internet Archive: " + e.getMessage(), e);
         }
-        return s3Client;
     }
 
     /**
-     * Download a file from Internet Archive and store locally
-     * @param itemIdentifier The Internet Archive item identifier
-     * @param fileKey The file name within the item
-     * @return The local storage key
+     * Get content length and metadata for a file without downloading it
      */
-    @Transactional
-    public String downloadFromArchive(String itemIdentifier, String fileKey) throws IOException {
+    public long getContentLength(String itemIdentifier, String fileKey) throws IOException {
         try {
-            // Download from Internet Archive
-            GetObjectRequest getObjectRequest = GetObjectRequest.builder()
-                    .bucket(itemIdentifier)
-                    .key(fileKey)
-                    .build();
+            String encodedFileKey = java.net.URLEncoder.encode(fileKey, "UTF-8")
+                    .replace("+", "%20");
 
-            byte[] data = getS3Client().getObjectAsBytes(getObjectRequest).asByteArray();
+            String url = String.format("https://archive.org/download/%s/%s", itemIdentifier, encodedFileKey);
 
-            // Store locally
-            String localKey = UUID.randomUUID().toString() + "-" + fileKey;
-            Path dest = Paths.get(baseDir, localKey);
-            Files.createDirectories(dest.getParent());
-            Files.write(dest, data);
+            java.net.URL downloadUrl = new java.net.URL(url);
+            java.net.HttpURLConnection connection = (java.net.HttpURLConnection) downloadUrl.openConnection();
+            connection.setRequestMethod("HEAD");
+            connection.setConnectTimeout(5000);
+            connection.setReadTimeout(10000);
+            connection.setInstanceFollowRedirects(true);
 
-            // Get metadata
-            HeadObjectRequest headRequest = HeadObjectRequest.builder()
-                    .bucket(itemIdentifier)
-                    .key(fileKey)
-                    .build();
-            HeadObjectResponse headResponse = getS3Client().headObject(headRequest);
-
-            // Save to database
-            StoredObject obj = new StoredObject();
-            obj.setObjectKey(localKey);
-            obj.setContentType(headResponse.contentType());
-            obj.setSize(headResponse.contentLength());
-            obj.setLocationType("LOCAL");
-            obj.setName(fileKey);
-            obj.setBucketName(itemIdentifier); // Store original IA item for reference
-            storedObjectRepository.save(obj);
-
-            return localKey;
-        } catch (NoSuchKeyException e) {
-            throw new FileNotFoundException("File not found in Internet Archive: " + itemIdentifier + "/" + fileKey);
-        } catch (S3Exception e) {
-            throw new IOException("Error downloading from Internet Archive: " + e.getMessage(), e);
+            int responseCode = connection.getResponseCode();
+            if (responseCode == 200) {
+                long length = connection.getContentLengthLong();
+                connection.disconnect();
+                return length;
+            } else {
+                connection.disconnect();
+                throw new IOException("Failed to get file info. HTTP " + responseCode);
+            }
+        } catch (Exception e) {
+            throw new IOException("Error getting file info: " + e.getMessage(), e);
         }
     }
 
     /**
      * Stream a file directly from Internet Archive without storing locally
-     * @param itemIdentifier The Internet Archive item identifier
-     * @param fileKey The file name within the item
+     * Downloads entire file - use streamFromArchiveWithRange for better performance
      */
     public Resource streamFromArchive(String itemIdentifier, String fileKey) throws IOException {
         try {
-            GetObjectRequest getObjectRequest = GetObjectRequest.builder()
-                    .bucket(itemIdentifier)
-                    .key(fileKey)
-                    .build();
+            // URL encode the file key to handle spaces and special characters
+            String encodedFileKey = java.net.URLEncoder.encode(fileKey, "UTF-8")
+                    .replace("+", "%20");
 
-            byte[] data = getS3Client().getObjectAsBytes(getObjectRequest).asByteArray();
+            String url = String.format("https://archive.org/download/%s/%s", itemIdentifier, encodedFileKey);
 
-            return new ByteArrayResource(data);
-        } catch (NoSuchKeyException e) {
-            throw new FileNotFoundException("File not found in Internet Archive: " + itemIdentifier + "/" + fileKey);
-        } catch (S3Exception e) {
+            System.out.println("Downloading from: " + url);
+
+            // Download the file
+            java.net.URL downloadUrl = new java.net.URL(url);
+            java.net.HttpURLConnection connection = (java.net.HttpURLConnection) downloadUrl.openConnection();
+            connection.setRequestMethod("GET");
+            connection.setConnectTimeout(10000);
+            connection.setReadTimeout(30000);
+            connection.setInstanceFollowRedirects(true);
+
+            int responseCode = connection.getResponseCode();
+            if (responseCode == 200) {
+                ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+                InputStream inputStream = connection.getInputStream();
+
+                byte[] data = new byte[8192];
+                int bytesRead;
+                while ((bytesRead = inputStream.read(data, 0, data.length)) != -1) {
+                    buffer.write(data, 0, bytesRead);
+                }
+
+                inputStream.close();
+                connection.disconnect();
+
+                return new ByteArrayResource(buffer.toByteArray());
+            } else {
+                throw new IOException("Failed to download from Internet Archive. HTTP " + responseCode);
+            }
+
+        } catch (Exception e) {
             throw new IOException("Error streaming from Internet Archive: " + e.getMessage(), e);
         }
     }
@@ -127,15 +167,22 @@ public class InternetArchiveStorageService implements StorageService {
      */
     public boolean existsInArchive(String itemIdentifier, String fileKey) {
         try {
-            HeadObjectRequest headRequest = HeadObjectRequest.builder()
-                    .bucket(itemIdentifier)
-                    .key(fileKey)
-                    .build();
-            getS3Client().headObject(headRequest);
-            return true;
-        } catch (NoSuchKeyException e) {
-            return false;
-        } catch (S3Exception e) {
+            String encodedFileKey = java.net.URLEncoder.encode(fileKey, "UTF-8")
+                    .replace("+", "%20");
+
+            String url = String.format("https://archive.org/download/%s/%s", itemIdentifier, encodedFileKey);
+
+            java.net.URL downloadUrl = new java.net.URL(url);
+            java.net.HttpURLConnection connection = (java.net.HttpURLConnection) downloadUrl.openConnection();
+            connection.setRequestMethod("HEAD");
+            connection.setConnectTimeout(5000);
+            connection.setInstanceFollowRedirects(true);
+
+            int responseCode = connection.getResponseCode();
+            connection.disconnect();
+
+            return responseCode == 200;
+        } catch (Exception e) {
             return false;
         }
     }
