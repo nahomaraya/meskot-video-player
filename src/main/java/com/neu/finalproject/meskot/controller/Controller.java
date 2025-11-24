@@ -13,6 +13,7 @@ import com.neu.finalproject.meskot.service.MovieService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -20,8 +21,12 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.parameters.RequestBody;
 
 import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 @RestController
@@ -79,10 +84,91 @@ public class Controller {
 
         return ResponseEntity.ok(dtos);
     }
-
+    // Add this new endpoint to your Controller
     @GetMapping("/{id}/download")
-    public ResponseEntity<Resource> downloadVideo(@PathVariable Long id) {
-        return movieService.downloadMovie(id);
+    public ResponseEntity<?> downloadVideoWithResolution(
+            @PathVariable Long id,
+            @RequestParam(required = false) String resolution) {
+
+        Optional<Movie> movieOpt = movieRepository.findById(id);
+        if (movieOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+
+        Movie movie = movieOpt.get();
+        String sourceType = movie.getSourceType();
+
+        try {
+            // For Internet Archive, just redirect to download URL
+            if ("INTERNET_ARCHIVE".equals(sourceType)) {
+                String downloadUrl = iaMovieService.getMovieDownloadUrl(id);
+                return ResponseEntity.status(HttpStatus.FOUND)
+                        .location(java.net.URI.create(downloadUrl))
+                        .build();
+            }
+
+            // For local/Supabase, handle resolution conversion if requested
+            if (resolution != null && !resolution.isEmpty()) {
+                // Start async conversion job
+                String jobId = UUID.randomUUID().toString();
+                UploadJob job = new UploadJob();
+                job.setId(jobId);
+                job.setStatus("PENDING");
+                job.setProgress(0);
+                uploadJobRepository.save(job);
+
+                // Start conversion in background
+                movieService.handleDownloadConversion(movie, resolution, jobId);
+
+                return ResponseEntity.ok(Map.of(
+                        "jobId", jobId,
+                        "message", "Conversion started. Poll /api/download-status/" + jobId
+                ));
+            }
+
+            // Download original file
+            Path filePath = Paths.get(movie.getFilePath());
+            if (!Files.exists(filePath)) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+            }
+
+            Resource resource = new UrlResource(filePath.toUri());
+            String filename = filePath.getFileName().toString();
+
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                    .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                    .body(resource);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    // Add endpoint to check download conversion status
+    @GetMapping("/download-status/{jobId}")
+    public ResponseEntity<UploadJob> getDownloadStatus(@PathVariable String jobId) {
+        return uploadJobRepository.findById(jobId)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    // Add endpoint to download the converted file
+    @GetMapping("/download-result/{jobId}")
+    public ResponseEntity<Resource> downloadConvertedFile(@PathVariable String jobId) {
+        Optional<UploadJob> jobOpt = uploadJobRepository.findById(jobId);
+        if (jobOpt.isEmpty() || !"COMPLETED".equals(jobOpt.get().getStatus())) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Long movieId = jobOpt.get().getResultingMovieId();
+        if (movieId == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        return movieService.downloadMovie(movieId);
     }
 
     @GetMapping("/search")

@@ -4,7 +4,11 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.neu.finalproject.meskot.dto.MovieDto;
+import com.neu.finalproject.meskot.service.ProgressCallback;
 import com.neu.finalproject.meskot.ui.dto.JobResponse;
 import com.neu.finalproject.meskot.ui.dto.UploadJob;
 import org.apache.http.HttpEntity;
@@ -18,6 +22,7 @@ import org.apache.http.entity.mime.MultipartEntityBuilder;
 import org.apache.http.entity.mime.content.FileBody;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.util.EntityUtils;
+
 
 import java.io.*;
 import java.net.HttpURLConnection;
@@ -190,6 +195,60 @@ public class MovieApiService {
                 if (percent > lastPercent && progressCallback != null) {
                     lastPercent = percent;
                     progressCallback.accept(percent);
+                }
+            }
+        }
+    }
+
+    public String startConversion(Long movieId, String resolution) throws IOException {
+        String url = baseUrl + "/" + movieId + "/download?resolution=" + resolution;
+        HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+        conn.setRequestMethod("GET");
+
+        int responseCode = conn.getResponseCode();
+        if (responseCode == 200) {
+            String response = new String(conn.getInputStream().readAllBytes());
+            JsonObject json = JsonParser.parseString(response).getAsJsonObject();
+            return json.get("jobId").getAsString();
+        }
+        throw new IOException("Failed to start conversion: " + responseCode);
+    }
+
+    public UploadJob getDownloadStatus(String jobId) throws IOException {
+        String url = baseUrl + "/download-status/" + jobId;
+        HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+
+        String response = new String(conn.getInputStream().readAllBytes());
+        Gson gson = new Gson();
+        return gson.fromJson(response, UploadJob.class);
+    }
+
+    public void downloadConvertedFile(String jobId, File outputFile, ProgressCallback callback) throws IOException {
+        String url = baseUrl + "/download-result/" + jobId;
+
+        // Download directly from the URL instead of calling downloadMovie
+        HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+        conn.setRequestMethod("GET");
+
+        int responseCode = conn.getResponseCode();
+        if (responseCode != 200) {
+            throw new IOException("Failed to download: HTTP " + responseCode);
+        }
+
+        long totalBytes = conn.getContentLengthLong();
+
+        try (InputStream in = conn.getInputStream();
+             FileOutputStream out = new FileOutputStream(outputFile)) {
+
+            byte[] buffer = new byte[8192];
+            long downloaded = 0;
+            int bytesRead;
+
+            while ((bytesRead = in.read(buffer)) != -1) {
+                out.write(buffer, 0, bytesRead);
+                downloaded += bytesRead;
+                if (callback != null) {
+                    callback.onProgress((int) downloaded);
                 }
             }
         }

@@ -81,27 +81,6 @@ public class MovieService implements MovieServiceImpl {
                 .collect(Collectors.toList());
         return ResponseEntity.ok(dtos);
     }
-    public ResponseEntity<Resource> downloadMovie(Long id) {
-        Optional<Movie> movieOpt = movieRepository.findById(id);
-        if (movieOpt.isEmpty()) return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
-
-        Movie movie = movieOpt.get();
-        Path filePath = Paths.get(movie.getFilePath());
-        if (!Files.exists(filePath)) return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
-
-        try {
-            Resource resource = new UrlResource(filePath.toUri());
-            String filename = filePath.getFileName().toString();
-
-            return ResponseEntity.ok()
-                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
-                    .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                    .body(resource);
-
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
-    }
 
     public ResponseEntity<Resource> streamMovie(Long id, String rangeHeader) {
         Optional<Movie> movieOpt = movieRepository.findById(id);
@@ -280,6 +259,115 @@ public class MovieService implements MovieServiceImpl {
             // Clean up the original uploaded file
             uploadedFile.delete();
         }
+    }
+
+
+    public ResponseEntity<Resource> downloadMovie(Long id) {
+        Optional<Movie> movieOpt = movieRepository.findById(id);
+        if (movieOpt.isEmpty()) return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+
+        Movie movie = movieOpt.get();
+        Path filePath = Paths.get(movie.getFilePath());
+        if (!Files.exists(filePath)) return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+
+        try {
+            Resource resource = new UrlResource(filePath.toUri());
+            String filename = filePath.getFileName().toString();
+
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                    .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                    .body(resource);
+
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @Async("encodingTaskExecutor")
+    @Transactional
+    public void handleDownloadConversion(Movie sourceMovie, String targetResolution, String jobId) {
+        UploadJob job = uploadJobRepository.findById(jobId).orElse(null);
+        if (job == null) {
+            System.err.println("Job not found: " + jobId);
+            return;
+        }
+
+        try {
+            job.setStatus("ENCODING");
+            job.setProgress(0);
+            uploadJobRepository.save(job);
+
+            // Get source file
+            File sourceFile = new File(sourceMovie.getFilePath());
+
+            ProgressCallback callback = (percent) -> {
+                UploadJob currentJob = uploadJobRepository.findById(jobId).get();
+                currentJob.setProgress(percent);
+                uploadJobRepository.save(currentJob);
+            };
+
+            // Encode to target resolution
+            File encodedFile = encodingService.encode(
+                    sourceFile,
+                    targetResolution,
+                    "mp4",
+                    "h265",
+                    callback
+            );
+
+            // Store converted file
+            String storagePath = localStorageService.store(
+                    encodedFile,
+                    "downloads/" + sourceMovie.getTitle() + "-" + targetResolution + ".mp4"
+            );
+
+            // Create new movie entry for the download
+            Movie downloadMovie = new Movie();
+            downloadMovie.setTitle(sourceMovie.getTitle() + " (" + targetResolution + ")");
+            downloadMovie.setFilePath(storagePath);
+            downloadMovie.setUploadedDate(LocalDateTime.now());
+            downloadMovie.setCreatedAt(LocalDateTime.now());
+            downloadMovie.setStatus("DOWNLOAD_READY");
+            downloadMovie.setSourceType("LOCAL");
+            Movie savedMovie = movieRepository.save(downloadMovie);
+
+            // Mark job as complete
+            job.setStatus("COMPLETED");
+            job.setProgress(100);
+            job.setResultingMovieId(savedMovie.getId());
+            uploadJobRepository.save(job);
+
+            // Schedule cleanup after 1 hour
+            scheduleDownloadCleanup(savedMovie.getId(), 3600000); // 1 hour
+
+        } catch (Exception e) {
+            System.err.println("Conversion failed: " + e.getMessage());
+            e.printStackTrace();
+            job.setStatus("FAILED");
+            job.setErrorMessage(e.getMessage());
+            uploadJobRepository.save(job);
+        }
+    }
+
+    private void scheduleDownloadCleanup(Long movieId, long delayMs) {
+        new java.util.Timer().schedule(new java.util.TimerTask() {
+            @Override
+            public void run() {
+                try {
+                    movieRepository.findById(movieId).ifPresent(movie -> {
+                        try {
+                            Files.deleteIfExists(Paths.get(movie.getFilePath()));
+                            movieRepository.delete(movie);
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                    });
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        }, delayMs);
     }
 }
 

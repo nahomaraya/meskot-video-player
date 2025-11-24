@@ -14,6 +14,7 @@ public class MovieDto {
     private String resolution;
     private long sizeInBytes;
     private String format;
+    private String sourceType;
 
     public MovieDto(Long id, String title, String filePath, LocalDateTime uploadedDate) {
         this.id = id;

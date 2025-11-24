@@ -14,6 +14,7 @@ import java.awt.event.FocusEvent;
 import java.awt.geom.RoundRectangle2D;
 import java.io.File;
 import java.util.List;
+import javax.swing.Timer;
 
 /**
  * The View (V in MVP) - Grokpedia-inspired design
@@ -55,6 +56,7 @@ public class VideoPlayerUI extends JFrame {
     private final JList<MovieDto> libraryMovieListUI;
 
     private final JTextField mainSearchField;
+    JLabel movieTitleLabel = new JLabel("Select a movie");
     private final JSlider volumeSlider;
     private final JButton downloadButton;
     private final JButton uploadButton;
@@ -375,6 +377,192 @@ public class VideoPlayerUI extends JFrame {
         return button;
     }
 
+    // Replace the createPlayerPage() method in VideoPlayerUI.java with this:
+
+    private JPanel createPlayerPage() {
+        JPanel page = new JPanel(new BorderLayout());
+        page.setBackground(DARK_BG);
+
+        // Left sidebar with movie list
+        JScrollPane listScrollPane = new JScrollPane(playerMovieListUI);
+        listScrollPane.setPreferredSize(new Dimension(300, 600));
+        playerMovieListUI.setBackground(CARD_BG);
+        playerMovieListUI.setForeground(TEXT_PRIMARY);
+
+        // === MAIN CONTROL PANEL WITH SEEKING ===
+
+        JPanel nowPlayingPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
+        nowPlayingPanel.setBackground(CARD_BG);
+        nowPlayingPanel.setBorder(new EmptyBorder(5, 10, 5, 10));
+
+        JLabel nowPlayingLabel = new JLabel("Now Playing: ");
+        nowPlayingLabel.setForeground(TEXT_SECONDARY);
+        nowPlayingLabel.setFont(new Font("Inter", Font.BOLD, 14));
+
+        JLabel movieTitleLabel = new JLabel("Select a movie");
+        movieTitleLabel.setForeground(TEXT_PRIMARY);
+        movieTitleLabel.setFont(new Font("Inter", Font.PLAIN, 14));
+
+        nowPlayingPanel.add(nowPlayingLabel);
+        nowPlayingPanel.add(movieTitleLabel);
+
+        JPanel controlPanel = new JPanel();
+        controlPanel.setLayout(new BoxLayout(controlPanel, BoxLayout.Y_AXIS));
+        controlPanel.setBackground(CARD_BG);
+        controlPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
+
+        // --- Time Display Panel ---
+        JPanel timePanel = new JPanel(new BorderLayout());
+        timePanel.setBackground(CARD_BG);
+
+        JLabel currentTimeLabel = new JLabel("00:00");
+        currentTimeLabel.setForeground(TEXT_PRIMARY);
+        currentTimeLabel.setFont(new Font("Inter", Font.PLAIN, 12));
+
+        JLabel durationLabel = new JLabel("00:00");
+        durationLabel.setForeground(TEXT_PRIMARY);
+        durationLabel.setFont(new Font("Inter", Font.PLAIN, 12));
+
+        timePanel.add(currentTimeLabel, BorderLayout.WEST);
+        timePanel.add(durationLabel, BorderLayout.EAST);
+
+        // --- Seek Slider ---
+        JSlider seekSlider = new JSlider(0, 100, 0);
+        seekSlider.setBackground(CARD_BG);
+        seekSlider.setForeground(ACCENT_PURPLE);
+        seekSlider.setPaintTicks(false);
+        seekSlider.setPaintLabels(false);
+
+        // Update time display as video plays
+        Timer seekTimer = new Timer(500, e -> {
+            if (mediaPlayerComponent.mediaPlayer().status().isPlaying()) {
+                long current = presenter.getCurrentTime();
+                long duration = presenter.getDuration();
+
+                if (duration > 0) {
+                    int position = (int) ((current * 100) / duration);
+                    seekSlider.setValue(position);
+                    currentTimeLabel.setText(presenter.formatTime(current));
+                    durationLabel.setText(presenter.formatTime(duration));
+                }
+            }
+        });
+        seekTimer.start();
+
+        // Seek when user drags slider
+        seekSlider.addChangeListener(e -> {
+            if (seekSlider.getValueIsAdjusting()) {
+                long duration = presenter.getDuration();
+                if (duration > 0) {
+                    long seekTime = (seekSlider.getValue() * duration) / 100;
+                    presenter.onSeek(seekTime);
+                }
+            }
+        });
+
+        // --- Playback Controls ---
+        JPanel playbackPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 5));
+        playbackPanel.setBackground(CARD_BG);
+
+        JButton playButton = new JButton("▶");
+        JButton pauseButton = new JButton("⏸");
+        JButton stopButton = new JButton("⏹");
+        JButton skipBackwardButton = new JButton("⏪ -10s");
+        JButton skipForwardButton = new JButton("⏩ +10s");
+
+        for (JButton btn : new JButton[]{playButton, pauseButton, stopButton, skipForwardButton, skipBackwardButton}) {
+            btn.setBackground(CARD_BG);
+            btn.setForeground(TEXT_PRIMARY);
+            btn.setFocusPainted(false);
+            btn.setPreferredSize(new Dimension(80, 35));
+        }
+
+        playButton.setPreferredSize(new Dimension(60, 35));
+        pauseButton.setPreferredSize(new Dimension(60, 35));
+        stopButton.setPreferredSize(new Dimension(60, 35));
+
+        playbackPanel.add(skipBackwardButton);
+        playbackPanel.add(playButton);
+        playbackPanel.add(pauseButton);
+        playbackPanel.add(stopButton);
+        playbackPanel.add(skipForwardButton);
+
+        // --- Volume & Download Controls ---
+        JPanel volumeDownloadPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 15, 5));
+        volumeDownloadPanel.setBackground(CARD_BG);
+
+        JLabel volumeLabel = new JLabel("🔊");
+        volumeLabel.setForeground(TEXT_PRIMARY);
+        volumeSlider.setBackground(CARD_BG);
+        volumeSlider.setPreferredSize(new Dimension(120, 25));
+
+        JButton downloadBtn = createGrokButton("📥 Download", false);
+        downloadBtn.setPreferredSize(new Dimension(140, 35));
+
+        volumeDownloadPanel.add(volumeLabel);
+        volumeDownloadPanel.add(volumeSlider);
+        volumeDownloadPanel.add(downloadBtn);
+
+        // Assemble control panel
+        controlPanel.add(timePanel);
+        controlPanel.add(Box.createVerticalStrut(5));
+        controlPanel.add(seekSlider);
+        controlPanel.add(Box.createVerticalStrut(5));
+        controlPanel.add(playbackPanel);
+        controlPanel.add(Box.createVerticalStrut(5));
+        controlPanel.add(volumeDownloadPanel);
+
+        // Player panel with video and controls
+        JPanel playerPanel = new JPanel(new BorderLayout());
+        playerPanel.add(mediaPlayerComponent, BorderLayout.CENTER);
+        playerPanel.add(controlPanel, BorderLayout.SOUTH);
+        playerPanel.add(nowPlayingPanel, BorderLayout.NORTH); // Add this line
+        playerPanel.add(mediaPlayerComponent, BorderLayout.CENTER);
+        playerPanel.add(controlPanel, BorderLayout.SOUTH);
+
+        // Split pane
+        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, listScrollPane, playerPanel);
+        splitPane.setDividerLocation(310);
+        splitPane.setResizeWeight(0);
+
+        page.add(splitPane, BorderLayout.CENTER);
+
+        // Top navigation bar
+        JPanel topBar = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        topBar.setBackground(CARD_BG);
+        JButton homeButton = createGrokButton("Home", false);
+        JButton backToListButton = createGrokButton("Back to List", false);
+        homeButton.setPreferredSize(new Dimension(120, 40));
+        backToListButton.setPreferredSize(new Dimension(150, 40));
+        topBar.add(homeButton);
+        topBar.add(backToListButton);
+        page.add(topBar, BorderLayout.NORTH);
+
+        // === EVENT LISTENERS ===
+        homeButton.addActionListener(e -> presenter.onNavigate(PAGE_SEARCH));
+        backToListButton.addActionListener(e -> presenter.onNavigate(PAGE_LIST));
+        playButton.addActionListener(e -> presenter.onPlay());
+        pauseButton.addActionListener(e -> mediaPlayerComponent.mediaPlayer().controls().pause());
+        stopButton.addActionListener(e -> mediaPlayerComponent.mediaPlayer().controls().stop());
+        skipForwardButton.addActionListener(e -> presenter.onSkip(10));
+        skipBackwardButton.addActionListener(e -> presenter.onSkip(-10));
+        downloadBtn.addActionListener(e -> presenter.onDownloadWithResolution());
+
+        volumeSlider.addChangeListener(e ->
+                mediaPlayerComponent.mediaPlayer().audio().setVolume(volumeSlider.getValue())
+        );
+
+        playerMovieListUI.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                if (evt.getClickCount() == 2) {
+                    presenter.onPlay();
+                }
+            }
+        });
+
+        return page;
+    }
+
     // --- Helper: Rounded Border ---
     private static class RoundedBorder extends javax.swing.border.AbstractBorder {
         private final Color color;
@@ -413,6 +601,11 @@ public class VideoPlayerUI extends JFrame {
         }
     }
 
+    public void updateNowPlayingLabel(String title) {
+        // Store reference to movieTitleLabel as a class field first
+        movieTitleLabel.setText(title);
+    }
+
     private JPanel createMovieListPage() {
         JPanel page = new JPanel(new BorderLayout(10, 10));
         page.setBorder(new EmptyBorder(10, 10, 10, 10));
@@ -444,80 +637,6 @@ public class VideoPlayerUI extends JFrame {
             public void mouseClicked(java.awt.event.MouseEvent evt) {
                 if (evt.getClickCount() == 2) {
                     presenter.onMovieSelected(mainMovieListUI.getSelectedValue());
-                }
-            }
-        });
-
-        return page;
-    }
-
-    private JPanel createPlayerPage() {
-        JPanel page = new JPanel(new BorderLayout());
-        page.setBackground(DARK_BG);
-
-        JScrollPane listScrollPane = new JScrollPane(playerMovieListUI);
-        listScrollPane.setPreferredSize(new Dimension(300, 600));
-        playerMovieListUI.setBackground(CARD_BG);
-        playerMovieListUI.setForeground(TEXT_PRIMARY);
-
-        JPanel controlPanel = new JPanel();
-        controlPanel.setBackground(CARD_BG);
-        JButton playButton = new JButton("▶ Play");
-        JButton pauseButton = new JButton("⏸ Pause");
-        JButton stopButton = new JButton("⏹ Stop");
-        JButton skipForwardButton = new JButton("⏩ +10s");
-        JButton skipBackwardButton = new JButton("⏪ -10s");
-
-        for (JButton btn : new JButton[]{playButton, pauseButton, stopButton, skipForwardButton, skipBackwardButton}) {
-            btn.setBackground(CARD_BG);
-            btn.setForeground(TEXT_PRIMARY);
-            btn.setFocusPainted(false);
-        }
-
-        controlPanel.add(playButton);
-        controlPanel.add(pauseButton);
-        controlPanel.add(stopButton);
-        controlPanel.add(skipBackwardButton);
-        controlPanel.add(skipForwardButton);
-        JLabel volumeLabel = new JLabel("🔊");
-        volumeLabel.setForeground(TEXT_PRIMARY);
-        controlPanel.add(volumeLabel);
-        controlPanel.add(volumeSlider);
-
-        JPanel playerPanel = new JPanel(new BorderLayout());
-        playerPanel.add(mediaPlayerComponent, BorderLayout.CENTER);
-        playerPanel.add(controlPanel, BorderLayout.SOUTH);
-
-        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, listScrollPane, playerPanel);
-        splitPane.setDividerLocation(310);
-        splitPane.setResizeWeight(0);
-
-        page.add(splitPane, BorderLayout.CENTER);
-
-        JPanel topBar = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        topBar.setBackground(CARD_BG);
-        JButton homeButton = createGrokButton("Home", false);
-        JButton backToListButton = createGrokButton("Back to List", false);
-        homeButton.setPreferredSize(new Dimension(120, 40));
-        backToListButton.setPreferredSize(new Dimension(150, 40));
-        topBar.add(homeButton);
-        topBar.add(backToListButton);
-        page.add(topBar, BorderLayout.NORTH);
-
-        homeButton.addActionListener(e -> presenter.onNavigate(PAGE_SEARCH));
-        backToListButton.addActionListener(e -> presenter.onNavigate(PAGE_LIST));
-        playButton.addActionListener(e -> presenter.onPlay());
-        pauseButton.addActionListener(e -> mediaPlayerComponent.mediaPlayer().controls().pause());
-        stopButton.addActionListener(e -> mediaPlayerComponent.mediaPlayer().controls().stop());
-        skipForwardButton.addActionListener(e -> presenter.onSkip(10));
-        skipBackwardButton.addActionListener(e -> presenter.onSkip(-10));
-        volumeSlider.addChangeListener(e ->
-                mediaPlayerComponent.mediaPlayer().audio().setVolume(volumeSlider.getValue())
-        );
-        playerMovieListUI.addMouseListener(new java.awt.event.MouseAdapter() {
-            public void mouseClicked(java.awt.event.MouseEvent evt) {
-                if (evt.getClickCount() == 2) {
-                    presenter.onPlay();
                 }
             }
         });

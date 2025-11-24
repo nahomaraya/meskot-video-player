@@ -28,6 +28,8 @@ public class PlayerPresenter {
     private String currentUploadStep = "STEP_1";
     // --------------------------------------------
 
+    private MovieDto currentlyPlayingMovie;
+
     public PlayerPresenter(VideoPlayerUI view, MovieApiService apiService) {
         this.view = view;
         this.apiService = apiService;
@@ -109,31 +111,27 @@ public class PlayerPresenter {
     public void onMovieSelected(MovieDto selectedMovie) {
         if (selectedMovie == null) return;
 
-        // 1. Load the player page
+        // Store the currently playing movie
+        currentlyPlayingMovie = selectedMovie;
+        view.updateNowPlayingLabel(selectedMovie.getTitle());
         view.showPage(VideoPlayerUI.PAGE_PLAYER);
-
-        // 2. Populate the side-list with the *current* context
         view.updatePlayerMovieList(currentMovieList);
 
-        // 3. Start playing the selected movie
         String streamUrl = apiService.getBaseUrl() + "/" + selectedMovie.getId() + "/stream";
         System.out.println("▶ Playing: " + selectedMovie.getTitle() + " (" + streamUrl + ")");
         String[] options = {":network-caching=300"};
         view.getMediaPlayer().mediaPlayer().media().play(streamUrl, options);
     }
 
-    public void onNavigate(String pageName) {
-        view.showPage(pageName);
-        if (VideoPlayerUI.PAGE_UPLOAD.equals(pageName)) {
-            // Reset wizard state and data when navigating to the Upload page
-            currentUploadStep = "STEP_1";
-            view.setUploadWizardPage(currentUploadStep);
-            view.setSelectedUploadFile(null);
-        }
-    }
-
     public void onPlay() {
-        // Operates on the side list on the player page
+        // Check if we have a currently playing movie first
+        if (currentlyPlayingMovie != null) {
+            // Resume/replay current movie
+            view.getMediaPlayer().mediaPlayer().controls().play();
+            return;
+        }
+
+        // Otherwise, try to get selection from list
         MovieDto selected = view.getSelectedMovieFromList();
         if (selected == null) {
             view.showInfoMessage("Please select a movie from the list first.");
@@ -143,22 +141,35 @@ public class PlayerPresenter {
     }
 
     public void onOpenLocalVideo() {
-        // 1. Ask the view to show a file chooser specifically for opening files
         File file = view.showLocalVideoDialog();
 
         if (file != null) {
             view.showPage(VideoPlayerUI.PAGE_PLAYER);
             MovieDto localMovie = new MovieDto();
-            localMovie.setId(-1L); // Placeholder ID
+            localMovie.setId(-1L);
             localMovie.setTitle(file.getName() + " (Local File)");
             localMovie.setUploadedDate(LocalDateTime.now());
 
-            // 4. Update the sidebar list specifically for this local session
+            // Store as currently playing
+            currentlyPlayingMovie = localMovie;
+
             view.updatePlayerMovieList(Collections.singletonList(localMovie));
             String mediaPath = file.getAbsolutePath();
             System.out.println("Playing Local File: " + mediaPath);
 
             view.getMediaPlayer().mediaPlayer().media().play(mediaPath);
+        }
+    }
+
+
+
+    public void onNavigate(String pageName) {
+        view.showPage(pageName);
+        if (VideoPlayerUI.PAGE_UPLOAD.equals(pageName)) {
+            // Reset wizard state and data when navigating to the Upload page
+            currentUploadStep = "STEP_1";
+            view.setUploadWizardPage(currentUploadStep);
+            view.setSelectedUploadFile(null);
         }
     }
 
@@ -322,5 +333,218 @@ public class PlayerPresenter {
                 }
             }
         }, 0, 2000); // Poll every 2 seconds
+    }
+
+
+    /**
+     * Seek to a specific time in the video
+     */
+    public void onSeek(long timeInMillis) {
+        view.getMediaPlayer().mediaPlayer().controls().setTime(timeInMillis);
+    }
+
+    /**
+     * Get current playback time
+     */
+    public long getCurrentTime() {
+        return view.getMediaPlayer().mediaPlayer().status().time();
+    }
+
+    /**
+     * Get total video duration
+     */
+    public long getDuration() {
+        return view.getMediaPlayer().mediaPlayer().status().length();
+    }
+
+    /**
+     * Format time in mm:ss format
+     */
+    public String formatTime(long millis) {
+        long seconds = millis / 1000;
+        long minutes = seconds / 60;
+        seconds = seconds % 60;
+        return String.format("%02d:%02d", minutes, seconds);
+    }
+
+    /**
+     * Download with resolution selection
+     */
+    public void onDownloadWithResolution() {
+        // Use currently playing movie if available
+        MovieDto selected = currentlyPlayingMovie;
+
+        // If no movie is playing, try to get selection from list
+        if (selected == null) {
+            selected = view.getSelectedMovieFromList();
+        }
+
+        if (selected == null) {
+            view.showInfoMessage("Please select a movie to download.");
+            return;
+        }
+
+        // Show resolution selection dialog
+        String[] resolutions = {"Original", "1080p", "720p", "480p", "360p"};
+        String selectedResolution = (String) JOptionPane.showInputDialog(
+                null,
+                "Select download resolution:",
+                "Download Options",
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                resolutions,
+                resolutions[0]
+        );
+
+        if (selectedResolution == null) return;
+
+        File outputFile = view.showSaveDialog(
+                selected.getTitle() + "-" + selectedResolution + ".mp4"
+        );
+        if (outputFile == null) return;
+
+        view.setDownloadButtonState(false, "Starting download...");
+
+        if ("Original".equals(selectedResolution) || isInternetArchiveMovie(selected)) {
+            startDirectDownload(selected, outputFile);
+        } else {
+            startConversionDownload(selected, selectedResolution, outputFile);
+        }
+    }
+
+    private boolean isInternetArchiveMovie(MovieDto movie) {
+        // Check if it's an IA movie - you may need to add a field to MovieDto
+        return movie.getSourceType() != null &&
+                movie.getSourceType().equals("INTERNET_ARCHIVE");
+    }
+
+    private void startDirectDownload(MovieDto movie, File outputFile) {
+        new SwingWorker<Void, Long>() {
+            @Override
+            protected Void doInBackground() throws Exception {
+                apiService.downloadMovie(movie.getId(), outputFile,
+                        (bytes) -> publish(bytes)
+                );
+                return null;
+            }
+
+            @Override
+            protected void process(List<Long> chunks) {
+                long bytes = chunks.get(chunks.size() - 1);
+                view.setDownloadButtonState(false,
+                        String.format("Downloading... (%.2f MB)", bytes / (1024.0 * 1024.0)));
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    get();
+                    view.showInfoMessage("Downloaded successfully!");
+                } catch (Exception e) {
+                    view.showErrorMessage("Download failed: " + e.getMessage());
+                } finally {
+                    view.setDownloadButtonState(true, "Download");
+                }
+            }
+        }.execute();
+    }
+
+    private void startConversionDownload(MovieDto movie, String resolution, File outputFile) {
+        new SwingWorker<String, Integer>() {
+            @Override
+            protected String doInBackground() throws Exception {
+                // Start conversion job
+                return apiService.startConversion(movie.getId(), resolution);
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    String jobId = get();
+                    view.setDownloadButtonState(false, "Converting...");
+                    pollConversionAndDownload(jobId, outputFile);
+                } catch (Exception e) {
+                    view.showErrorMessage("Failed to start conversion: " + e.getMessage());
+                    view.setDownloadButtonState(true, "Download");
+                }
+            }
+        }.execute();
+    }
+
+    private void pollConversionAndDownload(String jobId, File outputFile) {
+        Timer poller = new Timer(true);
+
+        poller.schedule(new TimerTask() {
+            @Override
+            public void run() {
+                try {
+                    UploadJob job = apiService.getDownloadStatus(jobId);
+
+                    SwingUtilities.invokeLater(() -> {
+                        switch (job.getStatus()) {
+                            case "ENCODING":
+                                view.setDownloadButtonState(false,
+                                        "Converting: " + job.getProgress() + "%");
+                                break;
+
+                            case "COMPLETED":
+                                poller.cancel();
+                                view.setDownloadButtonState(false, "Downloading...");
+                                downloadConvertedFile(jobId, outputFile);
+                                break;
+
+                            case "FAILED":
+                                poller.cancel();
+                                view.showErrorMessage("Conversion failed: " +
+                                        job.getErrorMessage());
+                                view.setDownloadButtonState(true, "Download");
+                                break;
+                        }
+                    });
+
+                } catch (Exception e) {
+                    poller.cancel();
+                    SwingUtilities.invokeLater(() -> {
+                        view.showErrorMessage("Error: " + e.getMessage());
+                        view.setDownloadButtonState(true, "Download");
+                    });
+                }
+            }
+        }, 0, 2000);
+    }
+
+    private void downloadConvertedFile(String jobId, File outputFile) {
+        new SwingWorker<Void, Long>() {
+            @Override
+            protected Void doInBackground() throws Exception {
+                apiService.downloadConvertedFile(jobId, outputFile,
+                        (bytes) -> publish((long) bytes)
+                );
+                return null;
+            }
+
+            @Override
+            protected void process(List<Long> chunks) {
+                long bytes = chunks.get(chunks.size() - 1);
+                view.setDownloadButtonState(false,
+                        String.format("Downloading... (%.2f MB)", bytes / (1024.0 * 1024.0)));
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    get();
+                    view.showInfoMessage("Downloaded successfully!");
+                } catch (Exception e) {
+                    view.showErrorMessage("Download failed: " + e.getMessage());
+                } finally {
+                    view.setDownloadButtonState(true, "Download");
+                }
+            }
+        }.execute();
+    }
+
+    public MovieDto getCurrentlyPlayingMovie() {
+        return currentlyPlayingMovie;
     }
 }
