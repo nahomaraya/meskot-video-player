@@ -19,17 +19,17 @@ public interface MovieRepository extends JpaRepository<Movie, Long> {
     @Query("SELECT m FROM Movie m ORDER BY m.uploadedDate DESC")
     List<Movie> findRecentMovies(org.springframework.data.domain.Pageable pageable);
 
-    @Query("SELECT m FROM Movie m WHERE LOWER(m.title) LIKE LOWER(CONCAT('%', :query, '%')) " +
-            "OR LOWER(m.description) LIKE LOWER(CONCAT('%', :query, '%')) " +
-            "ORDER BY m.uploadedDate DESC")
-    List<Movie> searchMovies(@Param("query") String query);
+//    @Query("SELECT m FROM Movie m WHERE LOWER(m.title) LIKE LOWER(CONCAT('%', :query, '%')) " +
+//            "OR LOWER(m.description) LIKE LOWER(CONCAT('%', :query, '%')) " +
+//            "ORDER BY m.uploadedDate DESC")
+//    List<Movie> searchMovies(@Param("query") String query);
 
     // New methods for Internet Archive support
     List<Movie> findByStatus(String status);
 
     List<Movie> findByUploaderId(Long uploaderId);
 
-    Optional<Movie> findByFilePath(String filePath);
+//    Optional<Movie> findByFilePath(String filePath);
 
     List<Movie> findByGenre(String genre);
 
@@ -48,4 +48,22 @@ public interface MovieRepository extends JpaRepository<Movie, Long> {
     // Find all Internet Archive movies
     @Query("SELECT m FROM Movie m WHERE m.sourceType = 'INTERNET_ARCHIVE' ORDER BY m.uploadedDate DESC")
     List<Movie> findInternetArchiveMovies();
+
+
+    // Search movies within a specific source type
+    @Query("SELECT m FROM Movie m WHERE " +
+            "(LOWER(m.title) LIKE LOWER(CONCAT('%', :query, '%')) OR " +
+            "LOWER(m.description) LIKE LOWER(CONCAT('%', :query, '%'))) AND " +
+            "m.sourceType = :sourceType")
+    List<Movie> searchMoviesBySourceType(@Param("query") String query,
+                                         @Param("sourceType") String sourceType);
+
+    // Existing search method (searches all)
+    @Query("SELECT m FROM Movie m WHERE " +
+            "LOWER(m.title) LIKE LOWER(CONCAT('%', :query, '%')) OR " +
+            "LOWER(m.description) LIKE LOWER(CONCAT('%', :query, '%'))")
+    List<Movie> searchMovies(@Param("query") String query);
+
+    // Find by file path (for IA imports)
+    Optional<Movie> findByFilePath(String filePath);
 }

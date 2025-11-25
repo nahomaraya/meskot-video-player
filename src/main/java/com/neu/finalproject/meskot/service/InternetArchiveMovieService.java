@@ -308,6 +308,9 @@ public class InternetArchiveMovieService {
     /**
      * Get direct download URL for a movie
      */
+    /**
+     * Get download URL for a movie
+     */
     public String getMovieDownloadUrl(Long movieId) throws Exception {
         Movie movie = movieRepository.findById(movieId)
                 .orElseThrow(() -> new Exception("Movie not found"));
@@ -316,7 +319,12 @@ public class InternetArchiveMovieService {
         String[] parts = filePath.split("/", 2);
 
         if (parts.length == 2) {
-            return storageService.getArchiveUrl(parts[0], parts[1]);
+            String itemIdentifier = parts[0];
+            String fileName = parts[1];
+            String encodedFileName = java.net.URLEncoder.encode(fileName, "UTF-8")
+                    .replace("+", "%20");
+
+            return String.format("https://archive.org/download/%s/%s", itemIdentifier, encodedFileName);
         } else {
             return "https://archive.org/details/" + filePath;
         }
