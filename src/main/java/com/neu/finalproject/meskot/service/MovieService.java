@@ -39,6 +39,7 @@ public class MovieService implements MovieServiceImpl {
     private UploadJobRepository uploadJobRepository;
 
     private final EncodingService encodingService;
+
     private final CompressionService compressionService;
     private final LocalStorageService localStorageService;
     private final InternetArchiveMovieService iaMovieService;

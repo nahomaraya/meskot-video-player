@@ -12,8 +12,7 @@ import java.io.File;
 import java.util.List;
 
 /**
- * The View (V in MVP) - Grokpedia-inspired design
- * Updated with global progress bar and data source selector
+ * The View (V in MVP) - Simplified with dialog-based upload/compress/download
  */
 public class VideoPlayerUI extends JFrame {
 
@@ -25,7 +24,6 @@ public class VideoPlayerUI extends JFrame {
     public static final String PAGE_SEARCH = "SEARCH";
     public static final String PAGE_LIST = "LIST";
     public static final String PAGE_PLAYER = "PLAYER";
-    public static final String PAGE_UPLOAD = "UPLOAD";
     public static final String PAGE_LIBRARY = "LIBRARY";
 
     // --- Data Source Constants ---
@@ -53,28 +51,17 @@ public class VideoPlayerUI extends JFrame {
     private final DefaultListModel<MovieDto> mainMovieListModel;
     private final JList<MovieDto> libraryMovieListUI;
     private final JTextField mainSearchField;
-    JLabel movieTitleLabel = new JLabel("Select a movie");
+    private final JLabel movieTitleLabel = new JLabel("Select a movie");
     private final JSlider volumeSlider;
     private final JButton downloadButton;
-    private final JButton uploadButton;
-    private final JProgressBar uploadProgressBar;
 
-    // --- NEW: Global Status Bar Components ---
+    // --- Global Status Bar Components ---
     private final JPanel globalStatusBar;
     private final JComboBox<String> dataSourceCombo;
     private final JProgressBar globalProgressBar;
     private final JLabel progressLabel;
     private final JLabel progressStatusLabel;
     private final JPanel progressPanel;
-
-    // --- Upload Wizard Components ---
-    private final CardLayout uploadCardLayout;
-    private final JPanel uploadWizardPanel;
-    private JButton uploadNextButton;
-    private JButton uploadPrevButton;
-    private final JLabel uploadStepLabel;
-    @Getter @Setter
-    private File selectedUploadFile;
 
     // --- Constructor ---
     public VideoPlayerUI() {
@@ -118,30 +105,22 @@ public class VideoPlayerUI extends JFrame {
         mainSearchField = new JTextField(40);
         volumeSlider = new JSlider(0, 100, 80);
         downloadButton = new JButton("Download");
-        uploadButton = new JButton("Upload");
-        uploadProgressBar = new JProgressBar(0, 100);
-        uploadCardLayout = new CardLayout();
-        uploadWizardPanel = new JPanel(uploadCardLayout);
-        uploadNextButton = new JButton("Next >");
-        uploadPrevButton = new JButton("< Previous");
-        uploadStepLabel = new JLabel("Step 1: Select File");
 
         // --- Main Layout with Status Bar ---
         JPanel contentWrapper = new JPanel(new BorderLayout());
         contentWrapper.add(globalStatusBar, BorderLayout.NORTH);
         contentWrapper.add(mainPanel, BorderLayout.CENTER);
 
-        // --- Build Pages ---
+        // --- Build Pages (simplified - no upload/compress pages) ---
         mainPanel.add(createSearchPage(), PAGE_SEARCH);
         mainPanel.add(createMovieListPage(), PAGE_LIST);
         mainPanel.add(createPlayerPage(), PAGE_PLAYER);
-        mainPanel.add(createUploadPage(), PAGE_UPLOAD);
         mainPanel.add(createLibraryPage(), PAGE_LIBRARY);
 
         add(contentWrapper);
     }
 
-    // --- NEW: Global Status Bar ---
+    // --- Global Status Bar ---
     private JPanel createGlobalStatusBar() {
         JPanel statusBar = new JPanel(new BorderLayout());
         statusBar.setBackground(CARD_BG);
@@ -164,7 +143,6 @@ public class VideoPlayerUI extends JFrame {
         dataSourceCombo.setPreferredSize(new Dimension(160, 28));
         dataSourceCombo.setBorder(BorderFactory.createLineBorder(BORDER_COLOR));
 
-        // Custom renderer for dark theme
         dataSourceCombo.setRenderer(new DefaultListCellRenderer() {
             @Override
             public Component getListCellRendererComponent(JList<?> list, Object value,
@@ -177,7 +155,6 @@ public class VideoPlayerUI extends JFrame {
             }
         });
 
-        // Add listener for data source changes
         dataSourceCombo.addActionListener(e -> {
             if (presenter != null) {
                 String selected = (String) dataSourceCombo.getSelectedItem();
@@ -191,7 +168,7 @@ public class VideoPlayerUI extends JFrame {
         // RIGHT: Progress Bar Panel
         progressPanel.setBackground(CARD_BG);
         progressPanel.setPreferredSize(new Dimension(350, 35));
-        progressPanel.setVisible(false); // Hidden by default
+        progressPanel.setVisible(false);
 
         JPanel progressInfoPanel = new JPanel(new BorderLayout());
         progressInfoPanel.setBackground(CARD_BG);
@@ -211,7 +188,6 @@ public class VideoPlayerUI extends JFrame {
         globalProgressBar.setBorderPainted(false);
         globalProgressBar.setStringPainted(false);
 
-        // Cancel button for long operations
         JButton cancelButton = new JButton("✕");
         cancelButton.setFont(new Font("Inter", Font.BOLD, 12));
         cancelButton.setForeground(TEXT_SECONDARY);
@@ -220,9 +196,7 @@ public class VideoPlayerUI extends JFrame {
         cancelButton.setFocusPainted(false);
         cancelButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
         cancelButton.addActionListener(e -> {
-            if (presenter != null) {
-                presenter.onCancelOperation();
-            }
+            if (presenter != null) presenter.onCancelOperation();
         });
 
         JPanel progressBarWrapper = new JPanel(new BorderLayout(5, 0));
@@ -240,23 +214,11 @@ public class VideoPlayerUI extends JFrame {
     }
 
     // --- Public Methods for Global Progress Bar ---
-
-    /**
-     * Show progress for upload/download operations
-     * @param type "UPLOAD" or "DOWNLOAD"
-     * @param filename The file being processed
-     * @param percent Progress percentage (0-100)
-     * @param status Additional status text
-     */
     public void showGlobalProgress(String type, String filename, int percent, String status) {
         SwingUtilities.invokeLater(() -> {
             progressPanel.setVisible(true);
-
             String icon = "UPLOAD".equals(type) ? "⬆️" : "⬇️";
-            String truncatedName = filename.length() > 25
-                    ? filename.substring(0, 22) + "..."
-                    : filename;
-
+            String truncatedName = filename.length() > 25 ? filename.substring(0, 22) + "..." : filename;
             progressLabel.setText(icon + " " + truncatedName);
             progressStatusLabel.setText(status);
 
@@ -266,15 +228,10 @@ public class VideoPlayerUI extends JFrame {
                 globalProgressBar.setIndeterminate(false);
                 globalProgressBar.setValue(percent);
             }
-
-            // Color based on type
             globalProgressBar.setForeground("UPLOAD".equals(type) ? ACCENT_BLUE : ACCENT_PURPLE);
         });
     }
 
-    /**
-     * Show completion state for progress bar
-     */
     public void showGlobalProgressComplete(String message, boolean success) {
         SwingUtilities.invokeLater(() -> {
             progressLabel.setText(success ? "✓ " + message : "✗ " + message);
@@ -283,16 +240,12 @@ public class VideoPlayerUI extends JFrame {
             globalProgressBar.setValue(100);
             globalProgressBar.setForeground(success ? SUCCESS_GREEN : WARNING_ORANGE);
 
-            // Auto-hide after 3 seconds
             Timer hideTimer = new Timer(3000, e -> hideGlobalProgress());
             hideTimer.setRepeats(false);
             hideTimer.start();
         });
     }
 
-    /**
-     * Hide the global progress bar
-     */
     public void hideGlobalProgress() {
         SwingUtilities.invokeLater(() -> {
             progressPanel.setVisible(false);
@@ -303,16 +256,10 @@ public class VideoPlayerUI extends JFrame {
         });
     }
 
-    /**
-     * Get the currently selected data source
-     */
     public String getSelectedDataSource() {
         return (String) dataSourceCombo.getSelectedItem();
     }
 
-    /**
-     * Set the data source programmatically
-     */
     public void setSelectedDataSource(String source) {
         dataSourceCombo.setSelectedItem(source);
     }
@@ -323,15 +270,22 @@ public class VideoPlayerUI extends JFrame {
         menuBar.setBackground(DARK_BG);
         menuBar.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, BORDER_COLOR));
 
+        // File Menu
         JMenu fileMenu = new JMenu("File");
         fileMenu.setForeground(TEXT_PRIMARY);
         fileMenu.setFont(new Font("Inter", Font.PLAIN, 14));
 
         JMenuItem openItem = new JMenuItem("Open Video File...");
         styleMenuItem(openItem);
-        openItem.addActionListener(e -> {
-            if (presenter != null) presenter.onOpenLocalVideo();
-        });
+        openItem.addActionListener(e -> { if (presenter != null) presenter.onOpenLocalVideo(); });
+
+        JMenuItem uploadItem = new JMenuItem("Upload Video...");
+        styleMenuItem(uploadItem);
+        uploadItem.addActionListener(e -> { if (presenter != null) presenter.onShowUploadDialog(); });
+
+        JMenuItem compressItem = new JMenuItem("Compress Video...");
+        styleMenuItem(compressItem);
+        compressItem.addActionListener(e -> { if (presenter != null) presenter.onShowCompressDialog(); });
 
         JMenuItem exitItem = new JMenuItem("Exit");
         styleMenuItem(exitItem);
@@ -339,33 +293,26 @@ public class VideoPlayerUI extends JFrame {
 
         fileMenu.add(openItem);
         fileMenu.addSeparator();
+        fileMenu.add(uploadItem);
+        fileMenu.add(compressItem);
+        fileMenu.addSeparator();
         fileMenu.add(exitItem);
 
+        // Navigate Menu
         JMenu navMenu = new JMenu("Navigate");
         navMenu.setForeground(TEXT_PRIMARY);
         navMenu.setFont(new Font("Inter", Font.PLAIN, 14));
 
         JMenuItem searchItem = new JMenuItem("Search Home");
         styleMenuItem(searchItem);
-        searchItem.addActionListener(e -> {
-            if (presenter != null) presenter.onNavigate(PAGE_SEARCH);
-        });
+        searchItem.addActionListener(e -> { if (presenter != null) presenter.onNavigate(PAGE_SEARCH); });
 
         JMenuItem libraryItem = new JMenuItem("Full Library");
         styleMenuItem(libraryItem);
-        libraryItem.addActionListener(e -> {
-            if (presenter != null) presenter.onLoadLibrary();
-        });
-
-        JMenuItem uploadItem = new JMenuItem("Upload Wizard");
-        styleMenuItem(uploadItem);
-        uploadItem.addActionListener(e -> {
-            if (presenter != null) presenter.onNavigate(PAGE_UPLOAD);
-        });
+        libraryItem.addActionListener(e -> { if (presenter != null) presenter.onLoadLibrary(); });
 
         navMenu.add(searchItem);
         navMenu.add(libraryItem);
-        navMenu.add(uploadItem);
 
         menuBar.add(fileMenu);
         menuBar.add(navMenu);
@@ -381,11 +328,7 @@ public class VideoPlayerUI extends JFrame {
         item.setOpaque(true);
     }
 
-    // --- Page Factory Methods ---
-    // (Keep all existing page creation methods: createSearchPage, createLibraryPage,
-    //  createPlayerPage, createMovieListPage, createUploadPage)
-    // ... [TRUNCATED FOR BREVITY - Keep your existing implementations]
-
+    // --- Search Page ---
     private JPanel createSearchPage() {
         JPanel page = new JPanel(new GridBagLayout());
         page.setBackground(DARK_BG);
@@ -411,6 +354,7 @@ public class VideoPlayerUI extends JFrame {
         JButton searchButton = createGrokButton("Search Movies", true);
         JButton uploadNavButton = createGrokButton("Upload Movie", false);
         JButton libraryNavButton = createGrokButton("View Full Library", false);
+        JButton compressNavButton = createGrokButton("Compress Video", false);
         libraryNavButton.setPreferredSize(new Dimension(200, 50));
 
         gbc.gridwidth = 2;
@@ -441,10 +385,11 @@ public class VideoPlayerUI extends JFrame {
         gbc.anchor = GridBagConstraints.CENTER;
         gbc.insets = new Insets(10, 20, 10, 20);
 
-        JPanel actionButtonsPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 20, 0));
+        JPanel actionButtonsPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 15, 0));
         actionButtonsPanel.setBackground(DARK_BG);
         actionButtonsPanel.add(libraryNavButton);
         actionButtonsPanel.add(uploadNavButton);
+        actionButtonsPanel.add(compressNavButton);
         page.add(actionButtonsPanel, gbc);
 
         JLabel footerLabel = new JLabel("Source code");
@@ -454,14 +399,17 @@ public class VideoPlayerUI extends JFrame {
         gbc.insets = new Insets(40, 20, 20, 20);
         page.add(footerLabel, gbc);
 
+        // Event handlers - open dialogs instead of navigating to pages
         searchButton.addActionListener(e -> presenter.onSearch());
         mainSearchField.addActionListener(e -> presenter.onSearch());
-        uploadNavButton.addActionListener(e -> presenter.onNavigate(PAGE_UPLOAD));
+        uploadNavButton.addActionListener(e -> presenter.onShowUploadDialog());
+        compressNavButton.addActionListener(e -> presenter.onShowCompressDialog());
         libraryNavButton.addActionListener(e -> presenter.onLoadLibrary());
 
         return page;
     }
 
+    // --- Library Page ---
     private JPanel createLibraryPage() {
         JPanel page = new JPanel(new BorderLayout(10, 10));
         page.setBorder(new EmptyBorder(10, 10, 10, 10));
@@ -501,64 +449,7 @@ public class VideoPlayerUI extends JFrame {
         return page;
     }
 
-    private JButton createGrokButton(String text, boolean isPrimary) {
-        JButton button = new JButton(text) {
-            @Override
-            protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                if (isPrimary) {
-                    GradientPaint gradient = new GradientPaint(0, 0, ACCENT_PURPLE,
-                            getWidth(), getHeight(), ACCENT_BLUE);
-                    g2.setPaint(gradient);
-                } else {
-                    g2.setColor(CARD_BG);
-                }
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 12, 12);
-                if (!isPrimary) {
-                    g2.setColor(BORDER_COLOR);
-                    g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 12, 12);
-                }
-                g2.dispose();
-                super.paintComponent(g);
-            }
-        };
-        button.setFont(new Font("Inter", Font.BOLD, 16));
-        button.setForeground(TEXT_PRIMARY);
-        button.setPreferredSize(new Dimension(200, 50));
-        button.setContentAreaFilled(false);
-        button.setBorderPainted(false);
-        button.setFocusPainted(false);
-        button.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        return button;
-    }
-
-    private static class RoundedBorder extends javax.swing.border.AbstractBorder {
-        private final Color color;
-        private final int radius;
-        RoundedBorder(Color color, int radius) {
-            this.color = color;
-            this.radius = radius;
-        }
-        @Override
-        public void paintBorder(Component c, Graphics g, int x, int y, int width, int height) {
-            Graphics2D g2 = (Graphics2D) g.create();
-            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g2.setColor(color);
-            g2.drawRoundRect(x, y, width - 1, height - 1, radius, radius);
-            g2.dispose();
-        }
-        @Override
-        public Insets getBorderInsets(Component c) { return new Insets(2, 2, 2, 2); }
-    }
-
-    public void updateNowPlayingLabel(String title) {
-        movieTitleLabel.setText(title);
-    }
-
-// ... Continue in next artifact due to length
-// === Continue from VideoPlayerUI.java Part 1 ===
-
+    // --- Player Page ---
     private JPanel createPlayerPage() {
         JPanel page = new JPanel(new BorderLayout());
         page.setBackground(DARK_BG);
@@ -605,8 +496,6 @@ public class VideoPlayerUI extends JFrame {
         JSlider seekSlider = new JSlider(0, 100, 0);
         seekSlider.setBackground(CARD_BG);
         seekSlider.setForeground(ACCENT_PURPLE);
-        seekSlider.setPaintTicks(false);
-        seekSlider.setPaintLabels(false);
 
         Timer seekTimer = new Timer(500, e -> {
             if (mediaPlayerComponent.mediaPlayer().status().isPlaying()) {
@@ -641,14 +530,12 @@ public class VideoPlayerUI extends JFrame {
         JButton skipBackwardButton = new JButton("⏪ -10s");
         JButton skipForwardButton = new JButton("⏩ +10s");
 
-        for (JButton btn : new JButton[]{playButton, pauseButton, stopButton,
-                skipForwardButton, skipBackwardButton}) {
+        for (JButton btn : new JButton[]{playButton, pauseButton, stopButton, skipForwardButton, skipBackwardButton}) {
             btn.setBackground(CARD_BG);
             btn.setForeground(TEXT_PRIMARY);
             btn.setFocusPainted(false);
             btn.setPreferredSize(new Dimension(80, 35));
         }
-
         playButton.setPreferredSize(new Dimension(60, 35));
         pauseButton.setPreferredSize(new Dimension(60, 35));
         stopButton.setPreferredSize(new Dimension(60, 35));
@@ -692,8 +579,7 @@ public class VideoPlayerUI extends JFrame {
         playerPanel.add(mediaPlayerComponent, BorderLayout.CENTER);
         playerPanel.add(controlPanel, BorderLayout.SOUTH);
 
-        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
-                listScrollPane, playerPanel);
+        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, listScrollPane, playerPanel);
         splitPane.setDividerLocation(310);
         splitPane.setResizeWeight(0);
 
@@ -709,6 +595,7 @@ public class VideoPlayerUI extends JFrame {
         topBar.add(backToListButton);
         page.add(topBar, BorderLayout.NORTH);
 
+        // Event handlers
         homeButton.addActionListener(e -> presenter.onNavigate(PAGE_SEARCH));
         backToListButton.addActionListener(e -> presenter.onNavigate(PAGE_LIST));
         playButton.addActionListener(e -> presenter.onPlay());
@@ -716,23 +603,19 @@ public class VideoPlayerUI extends JFrame {
         stopButton.addActionListener(e -> mediaPlayerComponent.mediaPlayer().controls().stop());
         skipForwardButton.addActionListener(e -> presenter.onSkip(10));
         skipBackwardButton.addActionListener(e -> presenter.onSkip(-10));
-        downloadButton.addActionListener(e -> presenter.onDownloadWithResolution());
-
-        volumeSlider.addChangeListener(e ->
-                mediaPlayerComponent.mediaPlayer().audio().setVolume(volumeSlider.getValue())
-        );
+        downloadButton.addActionListener(e -> presenter.onShowDownloadDialog());
+        volumeSlider.addChangeListener(e -> mediaPlayerComponent.mediaPlayer().audio().setVolume(volumeSlider.getValue()));
 
         playerMovieListUI.addMouseListener(new java.awt.event.MouseAdapter() {
             public void mouseClicked(java.awt.event.MouseEvent evt) {
-                if (evt.getClickCount() == 2) {
-                    presenter.onPlay();
-                }
+                if (evt.getClickCount() == 2) presenter.onPlay();
             }
         });
 
         return page;
     }
 
+    // --- Movie List Page ---
     private JPanel createMovieListPage() {
         JPanel page = new JPanel(new BorderLayout(10, 10));
         page.setBorder(new EmptyBorder(10, 10, 10, 10));
@@ -770,90 +653,59 @@ public class VideoPlayerUI extends JFrame {
         return page;
     }
 
-    private JPanel createUploadPage() {
-        JPanel page = new JPanel(new BorderLayout(10, 10));
-        page.setBorder(new EmptyBorder(20, 20, 20, 20));
-        page.setBackground(DARK_BG);
+    // --- Button Factory ---
+    private JButton createGrokButton(String text, boolean isPrimary) {
+        JButton button = new JButton(text) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                if (isPrimary) {
+                    GradientPaint gradient = new GradientPaint(0, 0, ACCENT_PURPLE, getWidth(), getHeight(), ACCENT_BLUE);
+                    g2.setPaint(gradient);
+                } else {
+                    g2.setColor(CARD_BG);
+                }
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 12, 12);
+                if (!isPrimary) {
+                    g2.setColor(BORDER_COLOR);
+                    g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 12, 12);
+                }
+                g2.dispose();
+                super.paintComponent(g);
+            }
+        };
+        button.setFont(new Font("Inter", Font.BOLD, 16));
+        button.setForeground(TEXT_PRIMARY);
+        button.setPreferredSize(new Dimension(200, 50));
+        button.setContentAreaFilled(false);
+        button.setBorderPainted(false);
+        button.setFocusPainted(false);
+        button.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        return button;
+    }
 
-        JPanel headerPanel = new JPanel(new BorderLayout());
-        headerPanel.setBackground(DARK_BG);
-        uploadStepLabel.setForeground(TEXT_PRIMARY);
-        uploadStepLabel.setFont(new Font("Inter", Font.BOLD, 20));
-        headerPanel.add(uploadStepLabel, BorderLayout.CENTER);
-
-        JButton homeButton = createGrokButton("Home", false);
-        homeButton.setPreferredSize(new Dimension(120, 40));
-        headerPanel.add(homeButton, BorderLayout.WEST);
-        page.add(headerPanel, BorderLayout.NORTH);
-
-        JPanel step1 = new JPanel(new GridBagLayout());
-        step1.setBackground(DARK_BG);
-        JButton selectFileButton = createGrokButton("Select Video File", true);
-        selectFileButton.setPreferredSize(new Dimension(250, 60));
-        step1.add(selectFileButton);
-
-        JPanel step2 = new JPanel(new GridBagLayout());
-        step2.setBackground(DARK_BG);
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(5, 5, 5, 5);
-        gbc.anchor = GridBagConstraints.WEST;
-        gbc.gridx = 0; gbc.gridy = 0;
-        JLabel titleLabel = new JLabel("Title:");
-        titleLabel.setForeground(TEXT_PRIMARY);
-        titleLabel.setFont(new Font("Inter", Font.PLAIN, 16));
-        step2.add(titleLabel, gbc);
-        gbc.gridx = 1;
-        JTextField titleField = new JTextField(30);
-        titleField.setBackground(INPUT_BG);
-        titleField.setForeground(TEXT_PRIMARY);
-        titleField.setCaretColor(TEXT_PRIMARY);
-        titleField.setFont(new Font("Inter", Font.PLAIN, 14));
-        step2.add(titleField, gbc);
-
-        gbc.gridx = 0; gbc.gridy = 1;
-        JLabel resLabel = new JLabel("Resolution:");
-        resLabel.setForeground(TEXT_PRIMARY);
-        resLabel.setFont(new Font("Inter", Font.PLAIN, 16));
-        step2.add(resLabel, gbc);
-        gbc.gridx = 1;
-        JComboBox<String> resCombo = new JComboBox<>(new String[]{"720p", "480p", "1080p"});
-        resCombo.setBackground(INPUT_BG);
-        resCombo.setForeground(TEXT_PRIMARY);
-        step2.add(resCombo, gbc);
-
-        JPanel step3 = new JPanel(new BorderLayout());
-        step3.setBackground(DARK_BG);
-        step3.add(uploadProgressBar, BorderLayout.CENTER);
-
-        uploadWizardPanel.add(step1, "STEP_1");
-        uploadWizardPanel.add(step2, "STEP_2");
-        uploadWizardPanel.add(step3, "STEP_3");
-
-        page.add(uploadWizardPanel, BorderLayout.CENTER);
-
-        JPanel navPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        navPanel.setBackground(DARK_BG);
-        uploadPrevButton = createGrokButton("< Previous", false);
-        uploadNextButton = createGrokButton("Next >", true);
-        uploadPrevButton.setPreferredSize(new Dimension(140, 45));
-        uploadNextButton.setPreferredSize(new Dimension(140, 45));
-        navPanel.add(uploadPrevButton);
-        navPanel.add(uploadNextButton);
-        page.add(navPanel, BorderLayout.SOUTH);
-
-        homeButton.addActionListener(e -> presenter.onNavigate(PAGE_SEARCH));
-        selectFileButton.addActionListener(e -> presenter.onUploadSelectFile());
-        uploadNextButton.addActionListener(e ->
-                presenter.onUploadWizardNext(titleField.getText(), (String)resCombo.getSelectedItem())
-        );
-        uploadPrevButton.addActionListener(e -> presenter.onUploadWizardPrevious());
-
-        return page;
+    // --- Rounded Border ---
+    private static class RoundedBorder extends javax.swing.border.AbstractBorder {
+        private final Color color;
+        private final int radius;
+        RoundedBorder(Color color, int radius) { this.color = color; this.radius = radius; }
+        @Override
+        public void paintBorder(Component c, Graphics g, int x, int y, int width, int height) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(color);
+            g2.drawRoundRect(x, y, width - 1, height - 1, radius, radius);
+            g2.dispose();
+        }
+        @Override
+        public Insets getBorderInsets(Component c) { return new Insets(2, 2, 2, 2); }
     }
 
     // --- Public Methods for Presenter ---
     public void attachPresenter(PlayerPresenter presenter) { this.presenter = presenter; }
     public void showPage(String pageName) { mainCardLayout.show(mainPanel, pageName); }
+    public void updateNowPlayingLabel(String title) { movieTitleLabel.setText(title); }
 
     public void updateMainMovieList(List<MovieDto> movies) {
         mainMovieListModel.clear();
@@ -865,71 +717,24 @@ public class VideoPlayerUI extends JFrame {
         if (movies != null) for (MovieDto m : movies) playerMovieListModel.addElement(m);
     }
 
-    public void setUploadWizardPage(String step) {
-        uploadCardLayout.show(uploadWizardPanel, step);
-        if ("STEP_1".equals(step)) {
-            uploadStepLabel.setText("Step 1: Select File");
-            uploadPrevButton.setEnabled(false);
-            uploadNextButton.setEnabled(true);
-            uploadNextButton.setText("Next >");
-        } else if ("STEP_2".equals(step)) {
-            uploadStepLabel.setText("Step 2: Enter Details");
-            uploadPrevButton.setEnabled(true);
-            uploadNextButton.setEnabled(true);
-            uploadNextButton.setText("Upload");
-        } else if ("STEP_3".equals(step)) {
-            uploadStepLabel.setText("Step 3: Uploading...");
-            uploadPrevButton.setEnabled(false);
-            uploadNextButton.setEnabled(false);
-        }
-    }
-
     public void showErrorMessage(String message) {
         JOptionPane.showMessageDialog(this, message, "Error", JOptionPane.ERROR_MESSAGE);
     }
+
     public void showInfoMessage(String message) {
         JOptionPane.showMessageDialog(this, message, "Info", JOptionPane.INFORMATION_MESSAGE);
     }
-    public void setDownloadButtonState(boolean enabled, String text) {
-        downloadButton.setEnabled(enabled);
-        downloadButton.setText(text);
-    }
-    public void setUploadProgress(String text, int value, boolean indeterminate) {
-        uploadProgressBar.setVisible(true);
-        uploadProgressBar.setIndeterminate(indeterminate);
-        uploadProgressBar.setString(text);
-        uploadProgressBar.setValue(value);
-    }
-    public void hideUploadProgressAfterDelay(String message) {
-        uploadProgressBar.setString(message);
-        uploadProgressBar.setIndeterminate(false);
-        Timer hideTimer = new Timer(5000, e -> uploadProgressBar.setVisible(false));
-        hideTimer.setRepeats(false);
-        hideTimer.start();
-    }
-    public File showSaveDialog(String suggestedName) {
-        JFileChooser chooser = new JFileChooser();
-        chooser.setSelectedFile(new File(suggestedName));
-        return chooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION
-                ? chooser.getSelectedFile() : null;
-    }
-    public File showOpenDialog() {
-        JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setDialogTitle("Select a video to upload");
-        return fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION
-                ? fileChooser.getSelectedFile() : null;
-    }
+
     public File showLocalVideoDialog() {
         JFileChooser fileChooser = new JFileChooser();
         fileChooser.setDialogTitle("Open Video File for Playback");
         return fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION
                 ? fileChooser.getSelectedFile() : null;
     }
-    public String showInputDialog(String message, String title) {
-        return JOptionPane.showInputDialog(this, message, title, JOptionPane.PLAIN_MESSAGE);
-    }
+
     public EmbeddedMediaPlayerComponent getMediaPlayer() { return mediaPlayerComponent; }
     public MovieDto getSelectedMovieFromList() { return playerMovieListUI.getSelectedValue(); }
     public String getSearchQuery() { return mainSearchField.getText().trim(); }
+
     public void release() { mediaPlayerComponent.release(); }
 }
