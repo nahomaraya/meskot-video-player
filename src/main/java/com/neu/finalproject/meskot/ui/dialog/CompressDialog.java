@@ -45,7 +45,7 @@ public class CompressDialog extends JDialog {
     private Consumer<CompressResult> onCompressStart;
 
     public CompressDialog(Frame parent) {
-        super(parent, "🗜️ Compress Video", true);
+        super(parent, "Compress Video", true);
         initUI();
         setSize(550, 580);
         setLocationRelativeTo(parent);
@@ -58,7 +58,7 @@ public class CompressDialog extends JDialog {
         mainPanel.setBorder(new EmptyBorder(20, 20, 20, 20));
 
         // === HEADER ===
-        JLabel headerLabel = new JLabel("🗜️ Video Compression");
+        JLabel headerLabel = new JLabel("Video Compression");
         headerLabel.setFont(new Font("Inter", Font.BOLD, 24));
         headerLabel.setForeground(TEXT_PRIMARY);
         mainPanel.add(headerLabel, BorderLayout.NORTH);
@@ -199,13 +199,13 @@ public class CompressDialog extends JDialog {
         // === TIPS SECTION ===
         gbc.gridy = 9;
         gbc.insets = new Insets(15, 8, 5, 8);
-        JLabel tipsLabel = new JLabel("<html><div style='width:400px; color:#9CA3AF; font-size:11px;'>" +
-                "<b>💡 Tips:</b><br>" +
-                "• H.265 produces smaller files but encodes slower<br>" +
-                "• Lower resolution = smaller file size<br>" +
-                "• 720p Medium is a good balance for sharing online" +
-                "</div></html>");
-        contentPanel.add(tipsLabel, gbc);
+//        JLabel tipsLabel = new JLabel("<html><div style='width:400px; color:#9CA3AF; font-size:11px;'>" +
+//                "<b>💡 Tips:</b><br>" +
+//                "• H.265 produces smaller files but encodes slower<br>" +
+//                "• Lower resolution = smaller file size<br>" +
+//                "• 720p Medium is a good balance for sharing online" +
+//                "</div></html>");
+//        contentPanel.add(tipsLabel, gbc);
 
         mainPanel.add(contentPanel, BorderLayout.CENTER);
 
@@ -218,7 +218,7 @@ public class CompressDialog extends JDialog {
         cancelButton.setPreferredSize(new Dimension(100, 40));
         cancelButton.addActionListener(e -> dispose());
 
-        compressButton = createStyledButton("🚀 Start Compression", true);
+        compressButton = createStyledButton("Start Compression", true);
         compressButton.setPreferredSize(new Dimension(180, 40));
         compressButton.addActionListener(e -> startCompression());
 
@@ -243,7 +243,7 @@ public class CompressDialog extends JDialog {
             sourceLabel.setText(truncateFilename(sourceFile.getName(), 30));
 
             double sizeMB = sourceFile.length() / (1024.0 * 1024.0);
-            sourceSizeLabel.setText(String.format("📊 Size: %.2f MB", sizeMB));
+            sourceSizeLabel.setText(String.format("Size: %.2f MB", sizeMB));
 
             // Auto-suggest output filename
             String name = sourceFile.getName();
@@ -345,7 +345,7 @@ public class CompressDialog extends JDialog {
         codecCombo.setEnabled(enabled);
         qualityCombo.setEnabled(enabled);
         compressButton.setEnabled(enabled);
-        compressButton.setText(enabled ? "🚀 Start Compression" : "⏳ Compressing...");
+        compressButton.setText(enabled ? "Start Compression" : "⏳ Compressing...");
     }
 
     // === GETTERS FOR SETTINGS ===

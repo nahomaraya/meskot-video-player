@@ -36,7 +36,7 @@ public class DownloadDialog extends JDialog {
     private Runnable onCancel;
 
     public DownloadDialog(Frame parent, MovieDto movie) {
-        super(parent, "📥 Download Video", true);
+        super(parent, "Download Video", true);
         this.movie = movie;
         initUI();
         setSize(500, 420);
@@ -161,7 +161,7 @@ public class DownloadDialog extends JDialog {
             dispose();
         });
 
-        downloadButton = createStyledButton("📥 Download", true);
+        downloadButton = createStyledButton("Download", true);
         downloadButton.setPreferredSize(new Dimension(140, 38));
         downloadButton.addActionListener(e -> startDownload());
 
@@ -268,7 +268,7 @@ public class DownloadDialog extends JDialog {
         resolutionCombo.setEnabled(enabled);
         selectOutputButton.setEnabled(enabled);
         downloadButton.setEnabled(enabled);
-        downloadButton.setText(enabled ? "📥 Download" : "⏳ Downloading...");
+        downloadButton.setText(enabled ? "Download" : "⏳ Downloading...");
     }
 
     private JButton createStyledButton(String text, boolean isPrimary) {

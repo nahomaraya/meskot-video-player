@@ -33,7 +33,7 @@ public class UploadDialog extends JDialog {
     private Consumer<UploadResult> onUploadStart;
 
     public UploadDialog(Frame parent) {
-        super(parent, "📤 Upload Video", true);
+        super(parent, "Upload Video", true);
         initUI();
         setSize(500, 450);
         setLocationRelativeTo(parent);

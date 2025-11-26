@@ -65,7 +65,7 @@ public class VideoPlayerUI extends JFrame {
 
     // --- Constructor ---
     public VideoPlayerUI() {
-        super("🎬 Meskot Player");
+        super("Meskot Player");
         setSize(1280, 800);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
@@ -354,7 +354,7 @@ public class VideoPlayerUI extends JFrame {
         JButton searchButton = createGrokButton("Search Movies", true);
         JButton uploadNavButton = createGrokButton("Upload Movie", false);
         JButton libraryNavButton = createGrokButton("View Full Library", false);
-        JButton compressNavButton = createGrokButton("Compress Video", false);
+//        JButton compressNavButton = createGrokButton("Compress Video", false);
         libraryNavButton.setPreferredSize(new Dimension(200, 50));
 
         gbc.gridwidth = 2;
@@ -389,7 +389,7 @@ public class VideoPlayerUI extends JFrame {
         actionButtonsPanel.setBackground(DARK_BG);
         actionButtonsPanel.add(libraryNavButton);
         actionButtonsPanel.add(uploadNavButton);
-        actionButtonsPanel.add(compressNavButton);
+//        actionButtonsPanel.add(compressNavButton);
         page.add(actionButtonsPanel, gbc);
 
         JLabel footerLabel = new JLabel("Source code");
@@ -403,7 +403,7 @@ public class VideoPlayerUI extends JFrame {
         searchButton.addActionListener(e -> presenter.onSearch());
         mainSearchField.addActionListener(e -> presenter.onSearch());
         uploadNavButton.addActionListener(e -> presenter.onShowUploadDialog());
-        compressNavButton.addActionListener(e -> presenter.onShowCompressDialog());
+//        compressNavButton.addActionListener(e -> presenter.onShowCompressDialog());
         libraryNavButton.addActionListener(e -> presenter.onLoadLibrary());
 
         return page;
@@ -418,7 +418,7 @@ public class VideoPlayerUI extends JFrame {
         JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 5));
         topPanel.setBackground(DARK_BG);
 
-        JLabel libraryLabel = new JLabel("🎬 Full Movie Library");
+        JLabel libraryLabel = new JLabel("Full Movie Library");
         libraryLabel.setForeground(TEXT_PRIMARY);
         libraryLabel.setFont(new Font("Inter", Font.BOLD, 24));
         topPanel.add(libraryLabel);
