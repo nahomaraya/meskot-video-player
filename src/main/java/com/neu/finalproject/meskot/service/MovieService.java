@@ -37,6 +37,8 @@ public class MovieService implements MovieServiceImpl {
     private MovieMetadataRepository movieMetadataRepository;
     @Autowired
     private UploadJobRepository uploadJobRepository;
+    @Autowired
+    private UploadHistoryService uploadHistoryService;
 
     private final EncodingService encodingService;
 
@@ -402,10 +404,18 @@ public class MovieService implements MovieServiceImpl {
             return;
         }
 
+        // Step 1: create UploadHistory record at start
+        uploadHistoryService.create(uploaderId != null ? uploaderId.intValue() : 1, title,
+            uploadedFile.getName(), uploadedFile.length(), versionResolution, jobId);
+
         try {
+            // Step 2: markUploading (right before starting encoding)
+            uploadHistoryService.markUploading(jobId);
             job.setStatus("ENCODING");
             job.setProgress(0);
             uploadJobRepository.save(job);
+            // Step 3: markEncoding as soon as encoding starts
+            uploadHistoryService.markEncoding(jobId);
 
             ProgressCallback callback = (percent) -> {
                 UploadJob currentJob = uploadJobRepository.findById(jobId).get();
@@ -466,6 +476,9 @@ public class MovieService implements MovieServiceImpl {
             job.setResultingMovieId(savedMovie.getId());
             uploadJobRepository.save(job);
 
+            // Step 4: markCompleted after movie, meta, and job all saved
+            uploadHistoryService.markCompleted(jobId, savedMovie.getId());
+
             System.out.println("=== UPLOAD COMPLETE ===");
 
             // Clean up encoded file (storage service already copied it)
@@ -478,6 +491,8 @@ public class MovieService implements MovieServiceImpl {
             job.setStatus("FAILED");
             job.setErrorMessage(e.getMessage());
             uploadJobRepository.save(job);
+            // Step 5: markFailed
+            uploadHistoryService.markFailed(jobId, e.getMessage());
         } finally {
             // Clean up original uploaded file
             if (uploadedFile.exists()) {

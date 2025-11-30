@@ -9,6 +9,11 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.io.File;
+import java.io.IOException;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 
 /**
@@ -63,6 +68,11 @@ public class VideoPlayerUI extends JFrame {
     private final JLabel progressStatusLabel;
     private final JPanel progressPanel;
 
+    private LoginPanel loginPanel;
+    private RegistrationPanel registrationPanel;
+    private String currentUser;
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
     // --- Constructor ---
     public VideoPlayerUI() {
         super("Meskot Player");
@@ -105,6 +115,12 @@ public class VideoPlayerUI extends JFrame {
         mainSearchField = new JTextField(40);
         volumeSlider = new JSlider(0, 100, 80);
         downloadButton = new JButton("Download");
+
+        loginPanel = new LoginPanel(this);
+        registrationPanel = new RegistrationPanel(this);
+        mainPanel.add(loginPanel, "LOGIN");
+        mainPanel.add(registrationPanel, "REGISTER");
+        showLoginPanel();
 
         // --- Main Layout with Status Bar ---
         JPanel contentWrapper = new JPanel(new BorderLayout());
@@ -313,6 +329,12 @@ public class VideoPlayerUI extends JFrame {
 
         navMenu.add(searchItem);
         navMenu.add(libraryItem);
+
+        JMenu userMenu = new JMenu("Account");
+        JMenuItem logoutItem = new JMenuItem("Logout");
+        logoutItem.addActionListener(e -> performLogout());
+        userMenu.add(logoutItem);
+        menuBar.add(userMenu);
 
         menuBar.add(fileMenu);
         menuBar.add(navMenu);
@@ -737,4 +759,67 @@ public class VideoPlayerUI extends JFrame {
     public String getSearchQuery() { return mainSearchField.getText().trim(); }
 
     public void release() { mediaPlayerComponent.release(); }
+
+    // --- Login/Registration/Logout Methods ---
+    public boolean performLogin(String username, String password) {
+        try {
+            // POST to /api/auth/login, expect 200 OK for success
+            URL url = new URL("http://localhost:8080/api/auth/login");
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setDoOutput(true);
+            String jsonInput = String.format("{\"username\":\"%s\", \"password\":\"%s\"}", username, password);
+            conn.getOutputStream().write(jsonInput.getBytes(StandardCharsets.UTF_8));
+            int responseCode = conn.getResponseCode();
+            if (responseCode == 200) {
+                // Success: Grab username and show main page
+                currentUser = username;
+                showPage(PAGE_SEARCH);
+                return true;
+            }
+        } catch (IOException ex) {
+            showErrorMessage("Login failed: " + ex.getMessage());
+        }
+        return false;
+    }
+
+    public boolean performRegistration(String username, String email, String password) {
+        try {
+            // POST to /api/auth/register
+            URL url = new URL("http://localhost:8080/api/auth/register");
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setDoOutput(true);
+            String jsonInput = String.format("{\"username\":\"%s\", \"email\":\"%s\", \"password\":\"%s\"}", username, email, password);
+            conn.getOutputStream().write(jsonInput.getBytes(StandardCharsets.UTF_8));
+            int responseCode = conn.getResponseCode();
+            return (responseCode == 201);
+        } catch (IOException ex) {
+            showErrorMessage("Registration failed: " + ex.getMessage());
+            return false;
+        }
+    }
+
+    public void showLoginPanel() {
+        mainCardLayout.show(mainPanel, "LOGIN");
+    }
+
+    public void showRegistrationPanel() {
+        mainCardLayout.show(mainPanel, "REGISTER");
+    }
+
+    public void performLogout() {
+        try {
+            URL url = new URL("http://localhost:8080/api/auth/logout");
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.getResponseCode(); // Ignore response
+        } catch (IOException ex) {
+            // Ignore
+        }
+        currentUser = null;
+        showLoginPanel();
+    }
 }

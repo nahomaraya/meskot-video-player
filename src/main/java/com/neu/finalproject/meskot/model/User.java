@@ -20,7 +20,10 @@ public class User {
     private String email;
     private String role;
     private String password;
+    private int isAdmin;
 
     private LocalDateTime createdAt = LocalDateTime.now();
 
+    public User(int i, String username, String email, boolean b) {
+    }
 }
