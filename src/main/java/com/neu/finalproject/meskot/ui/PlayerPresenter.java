@@ -24,6 +24,7 @@ public class PlayerPresenter {
     private List<MovieDto> currentMovieList;
     private MovieDto currentlyPlayingMovie;
     private String currentDataSource = VideoPlayerUI.SOURCE_LOCAL;
+    private String currentPage = VideoPlayerUI.PAGE_SEARCH;  // Track current page
 
     private final AtomicBoolean cancelRequested = new AtomicBoolean(false);
     private Timer currentPoller = null;
@@ -85,7 +86,7 @@ public class PlayerPresenter {
     // =========================================================================
 
     public void loadInitialMovies() {
-        view.showPage(VideoPlayerUI.PAGE_SEARCH);
+        onNavigate(VideoPlayerUI.PAGE_SEARCH);
         new SwingWorker<List<MovieDto>, Void>() {
             @Override
             protected List<MovieDto> doInBackground() throws Exception {
@@ -104,7 +105,7 @@ public class PlayerPresenter {
     }
 
     public void onLoadLibrary() {
-        view.showPage(VideoPlayerUI.PAGE_LIBRARY);
+        onNavigate(VideoPlayerUI.PAGE_LIBRARY);
         view.showGlobalProgress("DOWNLOAD", "Library", -1, "Loading...");
 
         new SwingWorker<List<MovieDto>, Void>() {
@@ -140,7 +141,7 @@ public class PlayerPresenter {
                 try {
                     currentMovieList = get();
                     view.updateMainMovieList(currentMovieList);
-                    view.showPage(VideoPlayerUI.PAGE_LIST);
+                    onNavigate(VideoPlayerUI.PAGE_LIST);
                     view.showGlobalProgressComplete("Found " + currentMovieList.size() + " results", true);
                 } catch (Exception e) {
                     view.showGlobalProgressComplete("Search failed", false);
@@ -150,47 +151,105 @@ public class PlayerPresenter {
         }.execute();
     }
 
+    /**
+     * Called when user selects a movie from the list.
+     * Does NOT auto-play - just prepares the player page.
+     */
     public void onMovieSelected(MovieDto selectedMovie) {
         if (selectedMovie == null) return;
+
         currentlyPlayingMovie = selectedMovie;
         view.updateNowPlayingLabel(selectedMovie.getTitle());
-        view.showPage(VideoPlayerUI.PAGE_PLAYER);
         view.updatePlayerMovieList(currentMovieList);
 
+        // Navigate to player page (this will stop any currently playing video)
+        onNavigate(VideoPlayerUI.PAGE_PLAYER);
+
+        // Prepare the stream URL but DON'T auto-play
         String streamUrl = apiService.getBaseUrl() + "/movies/" + selectedMovie.getId() + "/stream";
-        System.out.println("▶ Playing: " + selectedMovie.getTitle() + " (" + streamUrl + ")");
-        view.getMediaPlayer().mediaPlayer().media().play(streamUrl, ":network-caching=300");
+        System.out.println("▶ Ready to play: " + selectedMovie.getTitle() + " (" + streamUrl + ")");
+
+        // Load media but don't play yet - user must click play button
+        view.getMediaPlayer().mediaPlayer().media().prepare(streamUrl, ":network-caching=300");
     }
 
+    /**
+     * Called when user clicks the Play button
+     */
     public void onPlay() {
+        // If already playing, just resume
+        if (view.getMediaPlayer().mediaPlayer().status().isPlaying()) {
+            return;
+        }
+
+        // If we have a movie loaded, play it
         if (currentlyPlayingMovie != null) {
             view.getMediaPlayer().mediaPlayer().controls().play();
             return;
         }
+
+        // Otherwise, need to select from list first
         MovieDto selected = view.getSelectedMovieFromList();
         if (selected == null) {
             view.showInfoMessage("Please select a movie from the list first.");
             return;
         }
+
+        // Select and prepare the movie, then play
         onMovieSelected(selected);
+        view.getMediaPlayer().mediaPlayer().controls().play();
+    }
+
+    public void onPause() {
+        view.getMediaPlayer().mediaPlayer().controls().pause();
+    }
+
+    public void onStop() {
+        stopPlayback();
+    }
+
+    /**
+     * Stop playback and clear the current movie
+     */
+    private void stopPlayback() {
+        view.getMediaPlayer().mediaPlayer().controls().stop();
+        System.out.println("⏹ Playback stopped");
+    }
+
+    /**
+     * Navigate to a page - stops playback if leaving player page
+     */
+    public void onNavigate(String pageName) {
+        // If leaving the player page, stop playback
+        if (currentPage.equals(VideoPlayerUI.PAGE_PLAYER) && !pageName.equals(VideoPlayerUI.PAGE_PLAYER)) {
+            stopPlayback();
+            currentlyPlayingMovie = null;
+            view.updateNowPlayingLabel("Select a movie");
+        }
+
+        currentPage = pageName;
+        view.showPage(pageName);
     }
 
     public void onOpenLocalVideo() {
         File file = view.showLocalVideoDialog();
         if (file != null) {
-            view.showPage(VideoPlayerUI.PAGE_PLAYER);
+            // Create a local movie DTO
             MovieDto localMovie = new MovieDto();
             localMovie.setId(-1L);
             localMovie.setTitle(file.getName() + " (Local)");
             localMovie.setUploadedDate(LocalDateTime.now());
+
             currentlyPlayingMovie = localMovie;
             view.updatePlayerMovieList(Collections.singletonList(localMovie));
+            view.updateNowPlayingLabel(localMovie.getTitle());
+
+            // Navigate to player
+            onNavigate(VideoPlayerUI.PAGE_PLAYER);
+
+            // For local files, prepare and auto-play
             view.getMediaPlayer().mediaPlayer().media().play(file.getAbsolutePath());
         }
-    }
-
-    public void onNavigate(String pageName) {
-        view.showPage(pageName);
     }
 
     public void onSkip(int seconds) {
@@ -449,4 +508,5 @@ public class PlayerPresenter {
 
     public MovieDto getCurrentlyPlayingMovie() { return currentlyPlayingMovie; }
     public String getCurrentDataSource() { return currentDataSource; }
+    public String getCurrentPage() { return currentPage; }
 }

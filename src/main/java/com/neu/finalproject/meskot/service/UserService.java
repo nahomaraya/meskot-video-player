@@ -24,10 +24,28 @@ public class UserService  implements UserServiceImpl {
     @Override
     public Optional<User> login(String username, String password) {
         Optional<User> user = findByUsername(username);
-        if (user.isPresent() && BCrypt.checkpw(password, user.get().getPassword())) {
-            return user;
+        if (user.isPresent()) {
+            User userEntity = user.get();
+            String storedPassword = userEntity.getPassword();
+            
+            if (storedPassword != null && !storedPassword.isEmpty()) {
+                // First, try bcrypt hash if it looks like a hash
+                if (storedPassword.startsWith("$2")) {
+                    if (BCrypt.checkpw(password, storedPassword)) {
+                        return user;
+                    }
+                } else {
+                    // Fallback: try plain-text comparison
+                    if (storedPassword.equals(password)) {
+                        // Migrate to bcrypt: hash and save
+                        userEntity.setPassword(BCrypt.hashpw(password, BCrypt.gensalt()));
+                        userRepository.save(userEntity);
+                        return user;
+                    }
+                }
+            }
         }
-        return null;
+        return Optional.empty();
     }
 
     @Override

@@ -8,6 +8,8 @@ import uk.co.caprica.vlcj.player.component.EmbeddedMediaPlayerComponent;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
+import java.awt.event.*;
+import java.awt.geom.Ellipse2D;
 import java.io.File;
 import java.io.IOException;
 import java.net.HttpURLConnection;
@@ -16,27 +18,21 @@ import java.nio.charset.StandardCharsets;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 
-/**
- * The View (V in MVP) - Simplified with dialog-based upload/compress/download
- */
 public class VideoPlayerUI extends JFrame {
 
     private PlayerPresenter presenter;
     private final CardLayout mainCardLayout;
     private final JPanel mainPanel;
 
-    // --- Page Names (Constants) ---
     public static final String PAGE_SEARCH = "SEARCH";
     public static final String PAGE_LIST = "LIST";
     public static final String PAGE_PLAYER = "PLAYER";
     public static final String PAGE_LIBRARY = "LIBRARY";
 
-    // --- Data Source Constants ---
     public static final String SOURCE_LOCAL = "Local Storage";
     public static final String SOURCE_SUPABASE = "Supabase";
     public static final String SOURCE_INTERNET_ARCHIVE = "Internet Archive";
 
-    // --- Grokpedia Color Palette ---
     private static final Color DARK_BG = new Color(15, 15, 20);
     private static final Color CARD_BG = new Color(25, 25, 35);
     private static final Color ACCENT_PURPLE = new Color(147, 51, 234);
@@ -47,8 +43,8 @@ public class VideoPlayerUI extends JFrame {
     private static final Color BORDER_COLOR = new Color(45, 45, 55);
     private static final Color SUCCESS_GREEN = new Color(34, 197, 94);
     private static final Color WARNING_ORANGE = new Color(249, 115, 22);
+    private static final Color PROFILE_BG = new Color(147, 51, 234);
 
-    // --- Common UI Components ---
     private final EmbeddedMediaPlayerComponent mediaPlayerComponent;
     private final JList<MovieDto> playerMovieListUI;
     private final DefaultListModel<MovieDto> playerMovieListModel;
@@ -60,7 +56,6 @@ public class VideoPlayerUI extends JFrame {
     private final JSlider volumeSlider;
     private final JButton downloadButton;
 
-    // --- Global Status Bar Components ---
     private final JPanel globalStatusBar;
     private final JComboBox<String> dataSourceCombo;
     private final JProgressBar globalProgressBar;
@@ -68,18 +63,23 @@ public class VideoPlayerUI extends JFrame {
     private final JLabel progressStatusLabel;
     private final JPanel progressPanel;
 
+    // Profile menu components
+    private JPanel profileButton;
+    private JPopupMenu profileMenu;
+    private JLabel profileInitialLabel;
+
     private LoginPanel loginPanel;
     private RegistrationPanel registrationPanel;
+    @Getter
     private String currentUser;
+    private boolean isLoggedIn = false;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    // --- Constructor ---
     public VideoPlayerUI() {
         super("Meskot Player");
         setSize(1280, 800);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
-        // --- Initialize Global Status Bar Components FIRST ---
         dataSourceCombo = new JComboBox<>(new String[]{
                 SOURCE_LOCAL, SOURCE_SUPABASE, SOURCE_INTERNET_ARCHIVE
         });
@@ -89,13 +89,11 @@ public class VideoPlayerUI extends JFrame {
         progressPanel = new JPanel(new BorderLayout(5, 0));
         globalStatusBar = createGlobalStatusBar();
 
-        // --- Menu Bar ---
         setJMenuBar(createMenuBar());
 
         mainCardLayout = new CardLayout();
         mainPanel = new JPanel(mainCardLayout);
 
-        // --- Init shared components ---
         mediaPlayerComponent = new EmbeddedMediaPlayerComponent();
         playerMovieListModel = new DefaultListModel<>();
         playerMovieListUI = new JList<>(playerMovieListModel);
@@ -120,23 +118,21 @@ public class VideoPlayerUI extends JFrame {
         registrationPanel = new RegistrationPanel(this);
         mainPanel.add(loginPanel, "LOGIN");
         mainPanel.add(registrationPanel, "REGISTER");
-        showLoginPanel();
 
-        // --- Main Layout with Status Bar ---
         JPanel contentWrapper = new JPanel(new BorderLayout());
         contentWrapper.add(globalStatusBar, BorderLayout.NORTH);
         contentWrapper.add(mainPanel, BorderLayout.CENTER);
 
-        // --- Build Pages (simplified - no upload/compress pages) ---
         mainPanel.add(createSearchPage(), PAGE_SEARCH);
         mainPanel.add(createMovieListPage(), PAGE_LIST);
         mainPanel.add(createPlayerPage(), PAGE_PLAYER);
         mainPanel.add(createLibraryPage(), PAGE_LIBRARY);
 
         add(contentWrapper);
+
+        showLoginPanel();
     }
 
-    // --- Global Status Bar ---
     private JPanel createGlobalStatusBar() {
         JPanel statusBar = new JPanel(new BorderLayout());
         statusBar.setBackground(CARD_BG);
@@ -145,7 +141,6 @@ public class VideoPlayerUI extends JFrame {
                 new EmptyBorder(8, 15, 8, 15)
         ));
 
-        // LEFT: Data Source Selector
         JPanel leftPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
         leftPanel.setBackground(CARD_BG);
 
@@ -181,7 +176,10 @@ public class VideoPlayerUI extends JFrame {
         leftPanel.add(sourceLabel);
         leftPanel.add(dataSourceCombo);
 
-        // RIGHT: Progress Bar Panel
+        // Right panel with progress and profile
+        JPanel rightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 15, 0));
+        rightPanel.setBackground(CARD_BG);
+
         progressPanel.setBackground(CARD_BG);
         progressPanel.setPreferredSize(new Dimension(350, 35));
         progressPanel.setVisible(false);
@@ -223,70 +221,273 @@ public class VideoPlayerUI extends JFrame {
         progressPanel.add(progressInfoPanel, BorderLayout.NORTH);
         progressPanel.add(progressBarWrapper, BorderLayout.SOUTH);
 
+        // Create profile button
+        profileButton = createProfileButton();
+
+        rightPanel.add(progressPanel);
+        rightPanel.add(profileButton);
+
         statusBar.add(leftPanel, BorderLayout.WEST);
-        statusBar.add(progressPanel, BorderLayout.EAST);
+        statusBar.add(rightPanel, BorderLayout.EAST);
 
         return statusBar;
     }
 
-    // --- Public Methods for Global Progress Bar ---
-    public void showGlobalProgress(String type, String filename, int percent, String status) {
-        SwingUtilities.invokeLater(() -> {
-            progressPanel.setVisible(true);
-            String icon = "UPLOAD".equals(type) ? "⬆️" : "⬇️";
-            String truncatedName = filename.length() > 25 ? filename.substring(0, 22) + "..." : filename;
-            progressLabel.setText(icon + " " + truncatedName);
-            progressStatusLabel.setText(status);
+    private JPanel createProfileButton() {
+        JPanel button = new JPanel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-            if (percent < 0) {
-                globalProgressBar.setIndeterminate(true);
-            } else {
-                globalProgressBar.setIndeterminate(false);
-                globalProgressBar.setValue(percent);
+                // Draw circle background
+                g2.setColor(isLoggedIn ? PROFILE_BG : TEXT_SECONDARY);
+                g2.fill(new Ellipse2D.Double(2, 2, 32, 32));
+
+                g2.dispose();
             }
-            globalProgressBar.setForeground("UPLOAD".equals(type) ? ACCENT_BLUE : ACCENT_PURPLE);
+        };
+        button.setPreferredSize(new Dimension(36, 36));
+        button.setBackground(CARD_BG);
+        button.setLayout(new GridBagLayout());
+        button.setCursor(new Cursor(Cursor.HAND_CURSOR));
+
+        profileInitialLabel = new JLabel("?");
+        profileInitialLabel.setFont(new Font("Inter", Font.BOLD, 16));
+        profileInitialLabel.setForeground(Color.WHITE);
+        button.add(profileInitialLabel);
+
+        // Create popup menu
+        profileMenu = createProfileMenu();
+
+        button.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                // Show menu aligned to the right edge of the button
+                int x = button.getWidth() - 220; // menu width approx 220
+                int y = button.getHeight() + 5;
+                profileMenu.show(button, x, y);
+            }
         });
+
+        return button;
     }
 
-    public void showGlobalProgressComplete(String message, boolean success) {
-        SwingUtilities.invokeLater(() -> {
-            progressLabel.setText(success ? "✓ " + message : "✗ " + message);
-            progressStatusLabel.setText("");
-            globalProgressBar.setIndeterminate(false);
-            globalProgressBar.setValue(100);
-            globalProgressBar.setForeground(success ? SUCCESS_GREEN : WARNING_ORANGE);
+    private JPopupMenu createProfileMenu() {
+        JPopupMenu menu = new JPopupMenu();
+        menu.setBackground(CARD_BG);
+        menu.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(BORDER_COLOR, 1),
+                BorderFactory.createEmptyBorder(5, 0, 5, 0)
+        ));
 
-            Timer hideTimer = new Timer(3000, e -> hideGlobalProgress());
-            hideTimer.setRepeats(false);
-            hideTimer.start();
+        // Header with user info
+        JPanel headerPanel = new JPanel(new BorderLayout(10, 5));
+        headerPanel.setBackground(CARD_BG);
+        headerPanel.setBorder(new EmptyBorder(10, 15, 10, 15));
+        headerPanel.setOpaque(true);
+
+        JPanel avatarPanel = new JPanel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(isLoggedIn ? PROFILE_BG : TEXT_SECONDARY);
+                g2.fill(new Ellipse2D.Double(0, 0, 40, 40));
+                g2.dispose();
+            }
+        };
+        avatarPanel.setPreferredSize(new Dimension(40, 40));
+        avatarPanel.setOpaque(false);
+        avatarPanel.setLayout(new GridBagLayout());
+
+        JLabel avatarInitial = new JLabel("?");
+        avatarInitial.setFont(new Font("Inter", Font.BOLD, 18));
+        avatarInitial.setForeground(Color.WHITE);
+        avatarPanel.add(avatarInitial);
+
+        JPanel userInfoPanel = new JPanel();
+        userInfoPanel.setLayout(new BoxLayout(userInfoPanel, BoxLayout.Y_AXIS));
+        userInfoPanel.setBackground(CARD_BG);
+        userInfoPanel.setOpaque(false);
+
+        JLabel usernameLabel = new JLabel("Not logged in");
+        usernameLabel.setFont(new Font("Inter", Font.BOLD, 14));
+        usernameLabel.setForeground(TEXT_PRIMARY);
+
+        JLabel statusLabel = new JLabel("Click to sign in");
+        statusLabel.setFont(new Font("Inter", Font.PLAIN, 12));
+        statusLabel.setForeground(TEXT_SECONDARY);
+
+        userInfoPanel.add(usernameLabel);
+        userInfoPanel.add(Box.createVerticalStrut(2));
+        userInfoPanel.add(statusLabel);
+
+        headerPanel.add(avatarPanel, BorderLayout.WEST);
+        headerPanel.add(userInfoPanel, BorderLayout.CENTER);
+
+        menu.add(headerPanel);
+        menu.addSeparator();
+
+        // Menu items
+        JMenuItem accountItem = createProfileMenuItem("👤  My Account");
+        JMenuItem settingsItem = createProfileMenuItem("⚙️  Settings");
+        JMenuItem helpItem = createProfileMenuItem("❓  Help");
+        JMenuItem loginLogoutItem = createProfileMenuItem("🔐  Sign In");
+
+        accountItem.addActionListener(e -> {
+            if (!isLoggedIn) {
+                showLoginRequired("view account details");
+            } else {
+                showAccountDialog();
+            }
         });
-    }
 
-    public void hideGlobalProgress() {
-        SwingUtilities.invokeLater(() -> {
-            progressPanel.setVisible(false);
-            globalProgressBar.setValue(0);
-            globalProgressBar.setIndeterminate(false);
-            progressLabel.setText("");
-            progressStatusLabel.setText("");
+        loginLogoutItem.addActionListener(e -> {
+            if (isLoggedIn) {
+                performLogout();
+            } else {
+                showLoginPanel();
+            }
         });
+
+        menu.add(accountItem);
+        menu.add(settingsItem);
+        menu.add(helpItem);
+        menu.addSeparator();
+        menu.add(loginLogoutItem);
+
+        // Update menu when shown
+        menu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
+            @Override
+            public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent e) {
+                String initial = isLoggedIn && currentUser != null ?
+                        currentUser.substring(0, 1).toUpperCase() : "?";
+                avatarInitial.setText(initial);
+                usernameLabel.setText(isLoggedIn ? currentUser : "Not logged in");
+                statusLabel.setText(isLoggedIn ? "Signed in" : "Click to sign in");
+                loginLogoutItem.setText(isLoggedIn ? "🚪  Sign Out" : "🔐  Sign In");
+            }
+            @Override
+            public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent e) {}
+            @Override
+            public void popupMenuCanceled(javax.swing.event.PopupMenuEvent e) {}
+        });
+
+        return menu;
     }
 
-    public String getSelectedDataSource() {
-        return (String) dataSourceCombo.getSelectedItem();
+    private JMenuItem createProfileMenuItem(String text) {
+        JMenuItem item = new JMenuItem(text);
+        item.setBackground(CARD_BG);
+        item.setForeground(TEXT_PRIMARY);
+        item.setFont(new Font("Inter", Font.PLAIN, 14));
+        item.setBorder(new EmptyBorder(8, 15, 8, 15));
+        item.setOpaque(true);
+        return item;
     }
 
-    public void setSelectedDataSource(String source) {
-        dataSourceCombo.setSelectedItem(source);
+    private void updateProfileButton() {
+        String initial = isLoggedIn && currentUser != null ?
+                currentUser.substring(0, 1).toUpperCase() : "?";
+        profileInitialLabel.setText(initial);
+        profileButton.repaint();
     }
 
-    // --- Menu Bar ---
+    private void showAccountDialog() {
+        JDialog dialog = new JDialog(this, "My Account", true);
+        dialog.setSize(400, 300);
+        dialog.setLocationRelativeTo(this);
+
+        JPanel panel = new JPanel();
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        panel.setBackground(CARD_BG);
+        panel.setBorder(new EmptyBorder(30, 30, 30, 30));
+
+        // Avatar
+        JPanel avatarPanel = new JPanel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(PROFILE_BG);
+                g2.fill(new Ellipse2D.Double(25, 0, 60, 60));
+                g2.dispose();
+            }
+        };
+        avatarPanel.setPreferredSize(new Dimension(110, 70));
+        avatarPanel.setMaximumSize(new Dimension(110, 70));
+        avatarPanel.setBackground(CARD_BG);
+        avatarPanel.setLayout(new GridBagLayout());
+
+        JLabel avatarInitial = new JLabel(currentUser != null ?
+                currentUser.substring(0, 1).toUpperCase() : "?");
+        avatarInitial.setFont(new Font("Inter", Font.BOLD, 28));
+        avatarInitial.setForeground(Color.WHITE);
+        avatarPanel.add(avatarInitial);
+        avatarPanel.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        JLabel nameLabel = new JLabel(currentUser != null ? currentUser : "Unknown");
+        nameLabel.setFont(new Font("Inter", Font.BOLD, 20));
+        nameLabel.setForeground(TEXT_PRIMARY);
+        nameLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        JLabel statusLabel = new JLabel("Active Account");
+        statusLabel.setFont(new Font("Inter", Font.PLAIN, 14));
+        statusLabel.setForeground(SUCCESS_GREEN);
+        statusLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        panel.add(avatarPanel);
+        panel.add(Box.createVerticalStrut(15));
+        panel.add(nameLabel);
+        panel.add(Box.createVerticalStrut(5));
+        panel.add(statusLabel);
+        panel.add(Box.createVerticalStrut(30));
+
+        JButton closeButton = createGrokButton("Close", false);
+        closeButton.setPreferredSize(new Dimension(120, 40));
+        closeButton.setMaximumSize(new Dimension(120, 40));
+        closeButton.setAlignmentX(Component.CENTER_ALIGNMENT);
+        closeButton.addActionListener(e -> dialog.dispose());
+        panel.add(closeButton);
+
+        dialog.add(panel);
+        dialog.setVisible(true);
+    }
+
+    public boolean requireLogin(String action) {
+        if (!isLoggedIn) {
+            showLoginRequired(action);
+            return false;
+        }
+        return true;
+    }
+
+    private void showLoginRequired(String action) {
+        int result = JOptionPane.showConfirmDialog(this,
+                "You need to sign in to " + action + ".\n\nWould you like to sign in now?",
+                "Sign In Required",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.INFORMATION_MESSAGE);
+
+        if (result == JOptionPane.YES_OPTION) {
+            showLoginPanel();
+        }
+    }
+
+    public boolean isUserLoggedIn() {
+        return isLoggedIn;
+    }
+
+    // Menu Bar
     private JMenuBar createMenuBar() {
         JMenuBar menuBar = new JMenuBar();
         menuBar.setBackground(DARK_BG);
         menuBar.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, BORDER_COLOR));
 
-        // File Menu
         JMenu fileMenu = new JMenu("File");
         fileMenu.setForeground(TEXT_PRIMARY);
         fileMenu.setFont(new Font("Inter", Font.PLAIN, 14));
@@ -297,7 +498,11 @@ public class VideoPlayerUI extends JFrame {
 
         JMenuItem uploadItem = new JMenuItem("Upload Video...");
         styleMenuItem(uploadItem);
-        uploadItem.addActionListener(e -> { if (presenter != null) presenter.onShowUploadDialog(); });
+        uploadItem.addActionListener(e -> {
+            if (requireLogin("upload videos")) {
+                if (presenter != null) presenter.onShowUploadDialog();
+            }
+        });
 
         JMenuItem compressItem = new JMenuItem("Compress Video...");
         styleMenuItem(compressItem);
@@ -314,7 +519,6 @@ public class VideoPlayerUI extends JFrame {
         fileMenu.addSeparator();
         fileMenu.add(exitItem);
 
-        // Navigate Menu
         JMenu navMenu = new JMenu("Navigate");
         navMenu.setForeground(TEXT_PRIMARY);
         navMenu.setFont(new Font("Inter", Font.PLAIN, 14));
@@ -330,12 +534,6 @@ public class VideoPlayerUI extends JFrame {
         navMenu.add(searchItem);
         navMenu.add(libraryItem);
 
-        JMenu userMenu = new JMenu("Account");
-        JMenuItem logoutItem = new JMenuItem("Logout");
-        logoutItem.addActionListener(e -> performLogout());
-        userMenu.add(logoutItem);
-        menuBar.add(userMenu);
-
         menuBar.add(fileMenu);
         menuBar.add(navMenu);
 
@@ -350,7 +548,7 @@ public class VideoPlayerUI extends JFrame {
         item.setOpaque(true);
     }
 
-    // --- Search Page ---
+    // Search Page
     private JPanel createSearchPage() {
         JPanel page = new JPanel(new GridBagLayout());
         page.setBackground(DARK_BG);
@@ -376,7 +574,6 @@ public class VideoPlayerUI extends JFrame {
         JButton searchButton = createGrokButton("Search Movies", true);
         JButton uploadNavButton = createGrokButton("Upload Movie", false);
         JButton libraryNavButton = createGrokButton("View Full Library", false);
-//        JButton compressNavButton = createGrokButton("Compress Video", false);
         libraryNavButton.setPreferredSize(new Dimension(200, 50));
 
         gbc.gridwidth = 2;
@@ -411,7 +608,6 @@ public class VideoPlayerUI extends JFrame {
         actionButtonsPanel.setBackground(DARK_BG);
         actionButtonsPanel.add(libraryNavButton);
         actionButtonsPanel.add(uploadNavButton);
-//        actionButtonsPanel.add(compressNavButton);
         page.add(actionButtonsPanel, gbc);
 
         JLabel footerLabel = new JLabel("Source code");
@@ -421,17 +617,19 @@ public class VideoPlayerUI extends JFrame {
         gbc.insets = new Insets(40, 20, 20, 20);
         page.add(footerLabel, gbc);
 
-        // Event handlers - open dialogs instead of navigating to pages
         searchButton.addActionListener(e -> presenter.onSearch());
         mainSearchField.addActionListener(e -> presenter.onSearch());
-        uploadNavButton.addActionListener(e -> presenter.onShowUploadDialog());
-//        compressNavButton.addActionListener(e -> presenter.onShowCompressDialog());
+        uploadNavButton.addActionListener(e -> {
+            if (requireLogin("upload videos")) {
+                presenter.onShowUploadDialog();
+            }
+        });
         libraryNavButton.addActionListener(e -> presenter.onLoadLibrary());
 
         return page;
     }
 
-    // --- Library Page ---
+    // Library Page
     private JPanel createLibraryPage() {
         JPanel page = new JPanel(new BorderLayout(10, 10));
         page.setBorder(new EmptyBorder(10, 10, 10, 10));
@@ -471,7 +669,7 @@ public class VideoPlayerUI extends JFrame {
         return page;
     }
 
-    // --- Player Page ---
+    // Player Page
     private JPanel createPlayerPage() {
         JPanel page = new JPanel(new BorderLayout());
         page.setBackground(DARK_BG);
@@ -617,7 +815,6 @@ public class VideoPlayerUI extends JFrame {
         topBar.add(backToListButton);
         page.add(topBar, BorderLayout.NORTH);
 
-        // Event handlers
         homeButton.addActionListener(e -> presenter.onNavigate(PAGE_SEARCH));
         backToListButton.addActionListener(e -> presenter.onNavigate(PAGE_LIST));
         playButton.addActionListener(e -> presenter.onPlay());
@@ -625,7 +822,11 @@ public class VideoPlayerUI extends JFrame {
         stopButton.addActionListener(e -> mediaPlayerComponent.mediaPlayer().controls().stop());
         skipForwardButton.addActionListener(e -> presenter.onSkip(10));
         skipBackwardButton.addActionListener(e -> presenter.onSkip(-10));
-        downloadButton.addActionListener(e -> presenter.onShowDownloadDialog());
+        downloadButton.addActionListener(e -> {
+            if (requireLogin("download videos")) {
+                presenter.onShowDownloadDialog();
+            }
+        });
         volumeSlider.addChangeListener(e -> mediaPlayerComponent.mediaPlayer().audio().setVolume(volumeSlider.getValue()));
 
         playerMovieListUI.addMouseListener(new java.awt.event.MouseAdapter() {
@@ -637,7 +838,7 @@ public class VideoPlayerUI extends JFrame {
         return page;
     }
 
-    // --- Movie List Page ---
+    // Movie List Page
     private JPanel createMovieListPage() {
         JPanel page = new JPanel(new BorderLayout(10, 10));
         page.setBorder(new EmptyBorder(10, 10, 10, 10));
@@ -675,7 +876,7 @@ public class VideoPlayerUI extends JFrame {
         return page;
     }
 
-    // --- Button Factory ---
+    // Button Factory
     private JButton createGrokButton(String text, boolean isPrimary) {
         JButton button = new JButton(text) {
             @Override
@@ -707,7 +908,7 @@ public class VideoPlayerUI extends JFrame {
         return button;
     }
 
-    // --- Rounded Border ---
+    // Rounded Border
     private static class RoundedBorder extends javax.swing.border.AbstractBorder {
         private final Color color;
         private final int radius;
@@ -724,7 +925,58 @@ public class VideoPlayerUI extends JFrame {
         public Insets getBorderInsets(Component c) { return new Insets(2, 2, 2, 2); }
     }
 
-    // --- Public Methods for Presenter ---
+    // Public progress bar methods
+    public void showGlobalProgress(String type, String filename, int percent, String status) {
+        SwingUtilities.invokeLater(() -> {
+            progressPanel.setVisible(true);
+            String icon = "UPLOAD".equals(type) ? "⬆️" : "⬇️";
+            String truncatedName = filename.length() > 25 ? filename.substring(0, 22) + "..." : filename;
+            progressLabel.setText(icon + " " + truncatedName);
+            progressStatusLabel.setText(status);
+
+            if (percent < 0) {
+                globalProgressBar.setIndeterminate(true);
+            } else {
+                globalProgressBar.setIndeterminate(false);
+                globalProgressBar.setValue(percent);
+            }
+            globalProgressBar.setForeground("UPLOAD".equals(type) ? ACCENT_BLUE : ACCENT_PURPLE);
+        });
+    }
+
+    public void showGlobalProgressComplete(String message, boolean success) {
+        SwingUtilities.invokeLater(() -> {
+            progressLabel.setText(success ? "✓ " + message : "✗ " + message);
+            progressStatusLabel.setText("");
+            globalProgressBar.setIndeterminate(false);
+            globalProgressBar.setValue(100);
+            globalProgressBar.setForeground(success ? SUCCESS_GREEN : WARNING_ORANGE);
+
+            Timer hideTimer = new Timer(3000, e -> hideGlobalProgress());
+            hideTimer.setRepeats(false);
+            hideTimer.start();
+        });
+    }
+
+    public void hideGlobalProgress() {
+        SwingUtilities.invokeLater(() -> {
+            progressPanel.setVisible(false);
+            globalProgressBar.setValue(0);
+            globalProgressBar.setIndeterminate(false);
+            progressLabel.setText("");
+            progressStatusLabel.setText("");
+        });
+    }
+
+    public String getSelectedDataSource() {
+        return (String) dataSourceCombo.getSelectedItem();
+    }
+
+    public void setSelectedDataSource(String source) {
+        dataSourceCombo.setSelectedItem(source);
+    }
+
+    // Public Methods for Presenter
     public void attachPresenter(PlayerPresenter presenter) { this.presenter = presenter; }
     public void showPage(String pageName) { mainCardLayout.show(mainPanel, pageName); }
     public void updateNowPlayingLabel(String title) { movieTitleLabel.setText(title); }
@@ -760,10 +1012,9 @@ public class VideoPlayerUI extends JFrame {
 
     public void release() { mediaPlayerComponent.release(); }
 
-    // --- Login/Registration/Logout Methods ---
+    // Login/Registration/Logout Methods
     public boolean performLogin(String username, String password) {
         try {
-            // POST to /api/auth/login, expect 200 OK for success
             URL url = new URL("http://localhost:8080/api/auth/login");
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("POST");
@@ -773,8 +1024,9 @@ public class VideoPlayerUI extends JFrame {
             conn.getOutputStream().write(jsonInput.getBytes(StandardCharsets.UTF_8));
             int responseCode = conn.getResponseCode();
             if (responseCode == 200) {
-                // Success: Grab username and show main page
                 currentUser = username;
+                isLoggedIn = true;
+                updateProfileButton();
                 showPage(PAGE_SEARCH);
                 return true;
             }
@@ -786,7 +1038,6 @@ public class VideoPlayerUI extends JFrame {
 
     public boolean performRegistration(String username, String email, String password) {
         try {
-            // POST to /api/auth/register
             URL url = new URL("http://localhost:8080/api/auth/register");
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("POST");
@@ -815,11 +1066,13 @@ public class VideoPlayerUI extends JFrame {
             URL url = new URL("http://localhost:8080/api/auth/logout");
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("POST");
-            conn.getResponseCode(); // Ignore response
+            conn.getResponseCode();
         } catch (IOException ex) {
             // Ignore
         }
         currentUser = null;
+        isLoggedIn = false;
+        updateProfileButton();
         showLoginPanel();
     }
 }
