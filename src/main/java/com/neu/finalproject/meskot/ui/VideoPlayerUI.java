@@ -22,6 +22,7 @@ public class VideoPlayerUI extends JFrame {
     private PlayerPresenter presenter;
     private final CardLayout mainCardLayout;
     private final JPanel mainPanel;
+    private MovieGridPanel libraryGridPanel;
 
     // Gradient animation
     private float gradientOffset = 0f;
@@ -152,6 +153,131 @@ public class VideoPlayerUI extends JFrame {
         list.setSelectionForeground(TEXT_PRIMARY);
         list.setFixedCellHeight(60);
         return list;
+    }
+    private JPanel createLibraryPage() {
+        JPanel page = new JPanel(new BorderLayout(0, 0));
+        page.setBackground(BG_PRIMARY);
+
+        // Top bar with title, search, and navigation
+        JPanel topPanel = new JPanel(new BorderLayout());
+        topPanel.setBackground(BG_SECONDARY);
+        topPanel.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(0, 0, 1, 0, BORDER_SUBTLE),
+                new EmptyBorder(16, 20, 16, 20)
+        ));
+
+        // Left side - Title and count
+        JPanel leftPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 16, 0));
+        leftPanel.setBackground(BG_SECONDARY);
+
+        // Right side - View toggle and Home button
+        JPanel rightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 12, 0));
+        rightPanel.setBackground(BG_SECONDARY);
+
+        // View toggle buttons (Grid / List)
+        JPanel viewToggle = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        viewToggle.setBackground(BG_TERTIARY);
+        viewToggle.setBorder(BorderFactory.createLineBorder(BORDER_SUBTLE));
+
+        JButton gridViewBtn = createViewToggleButton("⊞", true);
+        JButton listViewBtn = createViewToggleButton("☰", false);
+
+        viewToggle.add(gridViewBtn);
+        viewToggle.add(listViewBtn);
+
+        JButton homeButton = createSecondaryButton("Home");
+        homeButton.addActionListener(e -> presenter.onNavigate(PAGE_SEARCH));
+
+        leftPanel.add(viewToggle);
+        leftPanel.add(homeButton);
+
+        topPanel.add(leftPanel, BorderLayout.WEST);
+        topPanel.add(rightPanel, BorderLayout.EAST);
+
+        // Content area with CardLayout to switch between grid and list views
+        CardLayout viewCardLayout = new CardLayout();
+        JPanel contentPanel = new JPanel(viewCardLayout);
+        contentPanel.setBackground(BG_PRIMARY);
+
+        // Grid view
+        libraryGridPanel = new MovieGridPanel();
+        libraryGridPanel.setOnMovieDoubleClicked(movie -> {
+            if (presenter != null) {
+                presenter.onMovieSelected(movie);
+            }
+        });
+
+        JScrollPane gridScrollPane = new JScrollPane(libraryGridPanel);
+        gridScrollPane.setBackground(BG_PRIMARY);
+        gridScrollPane.getViewport().setBackground(BG_PRIMARY);
+        gridScrollPane.setBorder(null);
+        gridScrollPane.getVerticalScrollBar().setUnitIncrement(16);
+        gridScrollPane.getVerticalScrollBar().setBackground(BG_SECONDARY);
+        gridScrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+
+        // List view (existing)
+        JScrollPane listScrollPane = new JScrollPane(libraryMovieListUI);
+        listScrollPane.getViewport().setBackground(BG_SECONDARY);
+        listScrollPane.setBorder(BorderFactory.createLineBorder(BORDER_SUBTLE));
+        listScrollPane.getVerticalScrollBar().setBackground(BG_SECONDARY);
+
+        contentPanel.add(gridScrollPane, "GRID");
+        contentPanel.add(listScrollPane, "LIST");
+
+        // View toggle actions
+        gridViewBtn.addActionListener(e -> {
+            viewCardLayout.show(contentPanel, "GRID");
+            gridViewBtn.setBackground(ACCENT);
+            gridViewBtn.setForeground(BG_PRIMARY);
+            listViewBtn.setBackground(BG_TERTIARY);
+            listViewBtn.setForeground(TEXT_PRIMARY);
+        });
+
+        listViewBtn.addActionListener(e -> {
+            viewCardLayout.show(contentPanel, "LIST");
+            listViewBtn.setBackground(ACCENT);
+            listViewBtn.setForeground(BG_PRIMARY);
+            gridViewBtn.setBackground(BG_TERTIARY);
+            gridViewBtn.setForeground(TEXT_PRIMARY);
+        });
+
+        // Double-click on list view
+        libraryMovieListUI.addMouseListener(new MouseAdapter() {
+            public void mouseClicked(MouseEvent evt) {
+                if (evt.getClickCount() == 2) {
+                    presenter.onMovieSelected(libraryMovieListUI.getSelectedValue());
+                }
+            }
+        });
+
+        page.add(topPanel, BorderLayout.NORTH);
+        page.add(contentPanel, BorderLayout.CENTER);
+
+        return page;
+    }
+
+    // Add this helper method for view toggle buttons
+    private JButton createViewToggleButton(String text, boolean isActive) {
+        JButton button = new JButton(text);
+        button.setFont(FONT_BODY);
+        button.setForeground(isActive ? BG_PRIMARY : TEXT_PRIMARY);
+        button.setBackground(isActive ? ACCENT : BG_TERTIARY);
+        button.setPreferredSize(new Dimension(36, 32));
+        button.setBorder(null);
+        button.setFocusPainted(false);
+        button.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        return button;
+    }
+
+    // Update the updateMainMovieList method to also update the grid:
+    public void updateMainMovieList(List<MovieDto> movies) {
+        mainMovieListModel.clear();
+        for (MovieDto m : movies) mainMovieListModel.addElement(m);
+
+        // Also update the grid panel
+        if (libraryGridPanel != null) {
+            libraryGridPanel.setMovies(movies);
+        }
     }
 
     private JPanel createGlobalStatusBar() {
@@ -548,7 +674,7 @@ public class VideoPlayerUI extends JFrame {
 
         GridBagConstraints gbc = new GridBagConstraints();
 
-        JLabel title = new JLabel("Meskot Video Player");
+        JLabel title = new JLabel("Welcome to Meskot!");
         title.setFont(FONT_TITLE);
         title.setForeground(TEXT_PRIMARY);
 
@@ -611,44 +737,6 @@ public class VideoPlayerUI extends JFrame {
             if (requireLogin("upload videos")) presenter.onShowUploadDialog();
         });
         libraryButton.addActionListener(e -> presenter.onLoadLibrary());
-
-        return page;
-    }
-
-    private JPanel createLibraryPage() {
-        JPanel page = new JPanel(new BorderLayout(0, 16));
-        page.setBorder(new EmptyBorder(20, 20, 20, 20));
-        page.setBackground(BG_PRIMARY);
-
-        JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 16, 0));
-        topPanel.setBackground(BG_PRIMARY);
-
-        JLabel libraryLabel = new JLabel("Library");
-        libraryLabel.setForeground(TEXT_PRIMARY);
-        libraryLabel.setFont(FONT_HEADING);
-
-        JButton homeButton = createSecondaryButton("Home");
-        homeButton.addActionListener(e -> presenter.onNavigate(PAGE_SEARCH));
-
-        topPanel.add(libraryLabel);
-        topPanel.add(Box.createHorizontalStrut(20));
-        topPanel.add(homeButton);
-
-        JScrollPane scrollPane = new JScrollPane(libraryMovieListUI);
-        scrollPane.getViewport().setBackground(BG_SECONDARY);
-        scrollPane.setBorder(BorderFactory.createLineBorder(BORDER_SUBTLE));
-        scrollPane.getVerticalScrollBar().setBackground(BG_SECONDARY);
-
-        page.add(topPanel, BorderLayout.NORTH);
-        page.add(scrollPane, BorderLayout.CENTER);
-
-        libraryMovieListUI.addMouseListener(new MouseAdapter() {
-            public void mouseClicked(MouseEvent evt) {
-                if (evt.getClickCount() == 2) {
-                    presenter.onMovieSelected(libraryMovieListUI.getSelectedValue());
-                }
-            }
-        });
 
         return page;
     }
@@ -781,14 +869,15 @@ public class VideoPlayerUI extends JFrame {
         topBar.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, BORDER_SUBTLE));
 
         JButton homeButton = createSecondaryButton("Home");
-        JButton backButton = createSecondaryButton("Back to List");
+        JButton backButton = createSecondaryButton("❮❮");
 
-        topBar.add(homeButton);
         topBar.add(backButton);
+        topBar.add(homeButton);
+
         page.add(topBar, BorderLayout.NORTH);
 
         homeButton.addActionListener(e -> presenter.onNavigate(PAGE_SEARCH));
-        backButton.addActionListener(e -> presenter.onNavigate(PAGE_LIST));
+        backButton.addActionListener(e -> presenter.onLoadLibrary());
         playButton.addActionListener(e -> {
             if (playButton.getText().equals("▶")) {
                 presenter.onPlay();
@@ -988,10 +1077,7 @@ public class VideoPlayerUI extends JFrame {
     public void showPage(String pageName) { mainCardLayout.show(mainPanel, pageName); }
     public void updateNowPlayingLabel(String title) { movieTitleLabel.setText(title); }
 
-    public void updateMainMovieList(List<MovieDto> movies) {
-        mainMovieListModel.clear();
-        for (MovieDto m : movies) mainMovieListModel.addElement(m);
-    }
+
 
     public void updatePlayerMovieList(List<MovieDto> movies) {
         playerMovieListModel.clear();
