@@ -23,6 +23,10 @@ public class VideoPlayerUI extends JFrame {
     private final CardLayout mainCardLayout;
     private final JPanel mainPanel;
 
+    // Gradient animation
+    private float gradientOffset = 0f;
+    private Timer gradientTimer;
+
     public static final String PAGE_SEARCH = "SEARCH";
     public static final String PAGE_LIST = "LIST";
     public static final String PAGE_PLAYER = "PLAYER";
@@ -468,8 +472,80 @@ public class VideoPlayerUI extends JFrame {
     }
 
     private JPanel createSearchPage() {
-        JPanel page = new JPanel(new GridBagLayout());
-        page.setBackground(BG_PRIMARY);
+        JPanel page = new JPanel(new GridBagLayout()) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+                int w = getWidth();
+                int h = getHeight();
+
+                // Base background
+                g2.setColor(new Color(30, 30, 30));
+                g2.fillRect(0, 0, w, h);
+
+                // Soft radial gradient blob 1
+                float cx1 = (float) (Math.sin(gradientOffset * 0.4) * w * 0.3 + w * 0.3);
+                float cy1 = (float) (Math.cos(gradientOffset * 0.3) * h * 0.3 + h * 0.3);
+                float radius1 = Math.min(w, h) * 0.8f;
+
+                float[] dist1 = {0f, 0.5f, 1f};
+                Color[] colors1 = {
+                        new Color(50, 50, 50, 120),
+                        new Color(40, 40, 40, 60),
+                        new Color(30, 30, 30, 0)
+                };
+                RadialGradientPaint rgp1 = new RadialGradientPaint(cx1, cy1, radius1, dist1, colors1);
+                g2.setPaint(rgp1);
+                g2.fillRect(0, 0, w, h);
+
+                // Soft radial gradient blob 2
+                float cx2 = (float) (Math.cos(gradientOffset * 0.5) * w * 0.3 + w * 0.7);
+                float cy2 = (float) (Math.sin(gradientOffset * 0.4) * h * 0.3 + h * 0.6);
+                float radius2 = Math.min(w, h) * 0.7f;
+
+                float[] dist2 = {0f, 0.4f, 1f};
+                Color[] colors2 = {
+                        new Color(45, 45, 45, 100),
+                        new Color(35, 35, 35, 50),
+                        new Color(30, 30, 30, 0)
+                };
+                RadialGradientPaint rgp2 = new RadialGradientPaint(cx2, cy2, radius2, dist2, colors2);
+                g2.setPaint(rgp2);
+                g2.fillRect(0, 0, w, h);
+
+                // Soft radial gradient blob 3
+                float cx3 = (float) (Math.sin(gradientOffset * 0.6) * w * 0.25 + w * 0.5);
+                float cy3 = (float) (Math.cos(gradientOffset * 0.35) * h * 0.25 + h * 0.4);
+                float radius3 = Math.min(w, h) * 0.6f;
+
+                float[] dist3 = {0f, 0.6f, 1f};
+                Color[] colors3 = {
+                        new Color(55, 55, 55, 80),
+                        new Color(38, 38, 38, 40),
+                        new Color(30, 30, 30, 0)
+                };
+                RadialGradientPaint rgp3 = new RadialGradientPaint(cx3, cy3, radius3, dist3, colors3);
+                g2.setPaint(rgp3);
+                g2.fillRect(0, 0, w, h);
+
+                g2.dispose();
+            }
+        };
+        page.setOpaque(false);
+
+        // Start gradient animation
+        if (gradientTimer == null) {
+            gradientTimer = new Timer(50, e -> {
+                gradientOffset += 0.02f;
+                page.repaint();
+            });
+            gradientTimer.start();
+        }
+
         GridBagConstraints gbc = new GridBagConstraints();
 
         JLabel title = new JLabel("Meskot Video Player");
@@ -492,7 +568,7 @@ public class VideoPlayerUI extends JFrame {
         ));
 
         JButton searchButton = createPrimaryButton("Search");
-        JButton libraryButton = createSecondaryButton("Browse Library");
+        JButton libraryButton = createSecondaryButton("Library");
         JButton uploadButton = createSecondaryButton("Upload");
 
         gbc.gridwidth = 2;
@@ -524,7 +600,7 @@ public class VideoPlayerUI extends JFrame {
         gbc.insets = new Insets(24, 0, 0, 0);
 
         JPanel buttonRow = new JPanel(new FlowLayout(FlowLayout.CENTER, 12, 0));
-        buttonRow.setBackground(BG_PRIMARY);
+        buttonRow.setOpaque(false);
         buttonRow.add(libraryButton);
         buttonRow.add(uploadButton);
         page.add(buttonRow, gbc);
@@ -648,13 +724,13 @@ public class VideoPlayerUI extends JFrame {
 
         JButton skipBackButton = createControlButton("−10");
         JButton playButton = createControlButton("▶");
-        JButton pauseButton = createControlButton("⏸");
+//        JButton pauseButton = createControlButton("⏸");
         JButton stopButton = createControlButton("⏹");
         JButton skipForwardButton = createControlButton("+10");
 
         playbackPanel.add(skipBackButton);
         playbackPanel.add(playButton);
-        playbackPanel.add(pauseButton);
+//        playbackPanel.add(pauseButton);
         playbackPanel.add(stopButton);
         playbackPanel.add(skipForwardButton);
 
@@ -713,9 +789,21 @@ public class VideoPlayerUI extends JFrame {
 
         homeButton.addActionListener(e -> presenter.onNavigate(PAGE_SEARCH));
         backButton.addActionListener(e -> presenter.onNavigate(PAGE_LIST));
-        playButton.addActionListener(e -> presenter.onPlay());
-        pauseButton.addActionListener(e -> mediaPlayerComponent.mediaPlayer().controls().pause());
-        stopButton.addActionListener(e -> mediaPlayerComponent.mediaPlayer().controls().stop());
+        playButton.addActionListener(e -> {
+            if (playButton.getText().equals("▶")) {
+                presenter.onPlay();
+                playButton.setText("⏸");
+            } else {
+                mediaPlayerComponent.mediaPlayer().controls().pause();
+                playButton.setText("▶");
+            }
+        });
+//        playButton.addActionListener(e -> presenter.onPlay());
+//        pauseButton.addActionListener(e -> mediaPlayerComponent.mediaPlayer().controls().pause());
+        stopButton.addActionListener(e -> {
+            mediaPlayerComponent.mediaPlayer().controls().stop();
+            playButton.setText("▶");
+        });
         skipForwardButton.addActionListener(e -> presenter.onSkip(10));
         skipBackButton.addActionListener(e -> presenter.onSkip(-10));
         downloadButton.addActionListener(e -> {
@@ -805,16 +893,10 @@ public class VideoPlayerUI extends JFrame {
                 g2.dispose();
                 super.paintComponent(g);
             }
-            @Override
-            public Dimension getPreferredSize() {
-                return new Dimension(160, 40);
-            }
-
         };
         button.setFont(FONT_BUTTON);
         button.setForeground(TEXT_PRIMARY);
-        button.setMargin(new Insets(10, 20, 10, 20));
-//        button.setPreferredSize(new Dimension(120, 40));
+        button.setPreferredSize(new Dimension(120, 40));
         button.setContentAreaFilled(false);
         button.setBorderPainted(false);
         button.setFocusPainted(false);
@@ -934,7 +1016,12 @@ public class VideoPlayerUI extends JFrame {
     public EmbeddedMediaPlayerComponent getMediaPlayer() { return mediaPlayerComponent; }
     public MovieDto getSelectedMovieFromList() { return playerMovieListUI.getSelectedValue(); }
     public String getSearchQuery() { return mainSearchField.getText().trim(); }
-    public void release() { mediaPlayerComponent.release(); }
+    public void release() {
+        if (gradientTimer != null) {
+            gradientTimer.stop();
+        }
+        mediaPlayerComponent.release();
+    }
 
     // Auth methods
     public boolean performLogin(String username, String password) {
