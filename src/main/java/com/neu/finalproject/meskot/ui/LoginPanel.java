@@ -4,7 +4,6 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.*;
-import java.awt.geom.Ellipse2D;
 import java.awt.geom.RoundRectangle2D;
 
 public class LoginPanel extends JPanel {
@@ -14,17 +13,22 @@ public class LoginPanel extends JPanel {
     private JButton loginButton, registerButton, guestButton;
     private JCheckBox showPasswordCheckbox;
 
-    // Theme colors matching VideoPlayerUI
-    private static final Color DARK_BG = new Color(15, 15, 20);
-    private static final Color CARD_BG = new Color(25, 25, 35);
-    private static final Color ACCENT_PURPLE = new Color(147, 51, 234);
-    private static final Color ACCENT_BLUE = new Color(59, 130, 246);
-    private static final Color TEXT_PRIMARY = new Color(240, 240, 245);
-    private static final Color TEXT_SECONDARY = new Color(156, 163, 175);
-    private static final Color INPUT_BG = new Color(30, 30, 40);
-    private static final Color BORDER_COLOR = new Color(45, 45, 55);
-    private static final Color ERROR_RED = new Color(239, 68, 68);
-    private static final Color SUCCESS_GREEN = new Color(34, 197, 94);
+    // Two-color scheme matching VideoPlayerUI
+    private static final Color BG_PRIMARY = new Color(33, 33, 33);
+    private static final Color BG_SECONDARY = new Color(48, 48, 48);
+    private static final Color BG_TERTIARY = new Color(64, 64, 64);
+    private static final Color BORDER_SUBTLE = new Color(75, 75, 75);
+    private static final Color TEXT_PRIMARY = new Color(236, 236, 236);
+    private static final Color TEXT_SECONDARY = new Color(156, 156, 156);
+    private static final Color ACCENT = new Color(255, 136, 0);
+    private static final Color ACCENT_HOVER = new Color(255, 160, 50);
+    private static final Color ERROR_RED = new Color(220, 80, 80);
+
+    private static final String FONT_FAMILY = "Inter";
+    private static final Font FONT_TITLE = new Font(FONT_FAMILY, Font.PLAIN, 24);
+    private static final Font FONT_BODY = new Font(FONT_FAMILY, Font.PLAIN, 14);
+    private static final Font FONT_SMALL = new Font(FONT_FAMILY, Font.PLAIN, 12);
+    private static final Font FONT_BUTTON = new Font(FONT_FAMILY, Font.PLAIN, 14);
 
     public LoginPanel(VideoPlayerUI parent) {
         this.parent = parent;
@@ -33,177 +37,126 @@ public class LoginPanel extends JPanel {
 
     private void initializeUI() {
         setLayout(new GridBagLayout());
-        setBackground(DARK_BG);
+        setBackground(BG_PRIMARY);
 
-        // Main card container
+        // Main card
         JPanel cardPanel = new JPanel() {
             @Override
             protected void paintComponent(Graphics g) {
                 super.paintComponent(g);
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(CARD_BG);
-                g2.fill(new RoundRectangle2D.Double(0, 0, getWidth(), getHeight(), 24, 24));
-                g2.setColor(BORDER_COLOR);
-                g2.draw(new RoundRectangle2D.Double(0, 0, getWidth() - 1, getHeight() - 1, 24, 24));
+                g2.setColor(BG_SECONDARY);
+                g2.fill(new RoundRectangle2D.Double(0, 0, getWidth(), getHeight(), 16, 16));
+                g2.setColor(BORDER_SUBTLE);
+                g2.draw(new RoundRectangle2D.Double(0, 0, getWidth() - 1, getHeight() - 1, 16, 16));
                 g2.dispose();
             }
         };
         cardPanel.setLayout(new BoxLayout(cardPanel, BoxLayout.Y_AXIS));
         cardPanel.setOpaque(false);
-        cardPanel.setBorder(new EmptyBorder(40, 50, 40, 50));
-        cardPanel.setPreferredSize(new Dimension(420, 520));
-
-        // Logo/Icon
-        JPanel logoPanel = createLogoPanel();
-        logoPanel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        cardPanel.setBorder(new EmptyBorder(48, 48, 48, 48));
+        cardPanel.setPreferredSize(new Dimension(380, 480));
 
         // Title
-        JLabel titleLabel = new JLabel("Welcome Back");
-        titleLabel.setFont(new Font("Inter", Font.BOLD, 28));
+        JLabel titleLabel = new JLabel("Welcome back");
+        titleLabel.setFont(FONT_TITLE);
         titleLabel.setForeground(TEXT_PRIMARY);
         titleLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        // Subtitle
-        JLabel subtitleLabel = new JLabel("Sign in to continue to Meskot Player");
-        subtitleLabel.setFont(new Font("Inter", Font.PLAIN, 14));
-        subtitleLabel.setForeground(TEXT_SECONDARY);
-        subtitleLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+//        JLabel subtitleLabel = new JLabel("Sign in to Meskot Player");
+//        subtitleLabel.setFont(FONT_SMALL);
+//        subtitleLabel.setForeground(TEXT_SECONDARY);
+//        subtitleLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        // Username field
+        // Input fields
         usernameField = new JTextField();
-        JPanel usernamePanel = createInputPanel("Username", "👤", usernameField);
+        JPanel usernamePanel = createInputPanel("Username", usernameField);
 
-        // Password field
         passwordField = new JPasswordField();
         passwordField.setEchoChar('•');
-        JPanel passwordPanel = createInputPanel("Password", "🔒", passwordField);
+        JPanel passwordPanel = createInputPanel("Password", passwordField);
 
-        // Show password checkbox
-        showPasswordCheckbox = new JCheckBox("Show password");
-        showPasswordCheckbox.setFont(new Font("Inter", Font.PLAIN, 12));
-        showPasswordCheckbox.setForeground(TEXT_SECONDARY);
-        showPasswordCheckbox.setBackground(CARD_BG);
-        showPasswordCheckbox.setOpaque(false);
-        showPasswordCheckbox.setFocusPainted(false);
-        showPasswordCheckbox.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        showPasswordCheckbox.setAlignmentX(Component.LEFT_ALIGNMENT);
-        showPasswordCheckbox.addActionListener(e -> {
-            if (showPasswordCheckbox.isSelected()) {
-                passwordField.setEchoChar((char) 0);
-            } else {
-                passwordField.setEchoChar('•');
-            }
-        });
+        // Show password
+//        showPasswordCheckbox = new JCheckBox("Show password");
+//        showPasswordCheckbox.setFont(FONT_SMALL);
+//        showPasswordCheckbox.setForeground(TEXT_SECONDARY);
+//        showPasswordCheckbox.setBackground(BG_SECONDARY);
+//        showPasswordCheckbox.setOpaque(false);
+//        showPasswordCheckbox.setFocusPainted(false);
+//        showPasswordCheckbox.setCursor(new Cursor(Cursor.HAND_CURSOR));
+//        showPasswordCheckbox.setAlignmentX(Component.LEFT_ALIGNMENT);
+//        showPasswordCheckbox.addActionListener(e ->
+//                passwordField.setEchoChar(showPasswordCheckbox.isSelected() ? (char) 0 : '•')
+//        );
 
-        // Login button
-        loginButton = createPrimaryButton("Sign In");
+        // Buttons
+        loginButton = createPrimaryButton("Sign in");
         loginButton.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        guestButton = createSecondaryButton("Continue as guest");
+        guestButton.setAlignmentX(Component.CENTER_ALIGNMENT);
 
         // Divider
         JPanel dividerPanel = createDivider();
         dividerPanel.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        // Guest button
-        guestButton = createSecondaryButton("Continue as Guest");
-        guestButton.setAlignmentX(Component.CENTER_ALIGNMENT);
-
         // Register link
-        JPanel registerPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 5, 0));
+        JPanel registerPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 4, 0));
         registerPanel.setOpaque(false);
 
         JLabel noAccountLabel = new JLabel("Don't have an account?");
-        noAccountLabel.setFont(new Font("Inter", Font.PLAIN, 13));
+        noAccountLabel.setFont(FONT_SMALL);
         noAccountLabel.setForeground(TEXT_SECONDARY);
 
         registerButton = new JButton("Sign up");
-        registerButton.setFont(new Font("Inter", Font.BOLD, 13));
-        registerButton.setForeground(ACCENT_PURPLE);
+        registerButton.setFont(new Font(FONT_FAMILY, Font.PLAIN, 12));
+        registerButton.setForeground(ACCENT);
         registerButton.setBackground(null);
         registerButton.setBorder(null);
         registerButton.setContentAreaFilled(false);
         registerButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
         registerButton.setFocusPainted(false);
         registerButton.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseEntered(MouseEvent e) {
-                registerButton.setForeground(ACCENT_BLUE);
-            }
-            @Override
-            public void mouseExited(MouseEvent e) {
-                registerButton.setForeground(ACCENT_PURPLE);
-            }
+            public void mouseEntered(MouseEvent e) { registerButton.setForeground(ACCENT_HOVER); }
+            public void mouseExited(MouseEvent e) { registerButton.setForeground(ACCENT); }
         });
 
         registerPanel.add(noAccountLabel);
         registerPanel.add(registerButton);
 
-        // Add components to card
-        cardPanel.add(logoPanel);
-        cardPanel.add(Box.createVerticalStrut(20));
+        // Layout
         cardPanel.add(titleLabel);
         cardPanel.add(Box.createVerticalStrut(8));
-        cardPanel.add(subtitleLabel);
-        cardPanel.add(Box.createVerticalStrut(30));
+//        cardPanel.add(subtitleLabel);
+        cardPanel.add(Box.createVerticalStrut(36));
         cardPanel.add(usernamePanel);
         cardPanel.add(Box.createVerticalStrut(16));
         cardPanel.add(passwordPanel);
-        cardPanel.add(Box.createVerticalStrut(8));
-        cardPanel.add(showPasswordCheckbox);
-        cardPanel.add(Box.createVerticalStrut(24));
+        cardPanel.add(Box.createVerticalStrut(12));
+//        cardPanel.add(showPasswordCheckbox);
+        cardPanel.add(Box.createVerticalStrut(28));
         cardPanel.add(loginButton);
-        cardPanel.add(Box.createVerticalStrut(20));
+        cardPanel.add(Box.createVerticalStrut(16));
         cardPanel.add(dividerPanel);
-        cardPanel.add(Box.createVerticalStrut(20));
+        cardPanel.add(Box.createVerticalStrut(16));
         cardPanel.add(guestButton);
-        cardPanel.add(Box.createVerticalStrut(24));
+        cardPanel.add(Box.createVerticalStrut(28));
         cardPanel.add(registerPanel);
 
         add(cardPanel);
-
         setupEventListeners();
     }
 
-    private JPanel createLogoPanel() {
-        JPanel panel = new JPanel() {
-            @Override
-            protected void paintComponent(Graphics g) {
-                super.paintComponent(g);
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
-                // Gradient circle background
-                GradientPaint gradient = new GradientPaint(
-                        0, 0, ACCENT_PURPLE,
-                        getWidth(), getHeight(), ACCENT_BLUE
-                );
-                g2.setPaint(gradient);
-                g2.fill(new Ellipse2D.Double(10, 0, 60, 60));
-
-                // Play icon
-                g2.setColor(Color.WHITE);
-                int[] xPoints = {32, 32, 52};
-                int[] yPoints = {18, 42, 30};
-                g2.fillPolygon(xPoints, yPoints, 3);
-
-                g2.dispose();
-            }
-        };
-        panel.setPreferredSize(new Dimension(80, 60));
-        panel.setMaximumSize(new Dimension(80, 60));
-        panel.setOpaque(false);
-        return panel;
-    }
-
-    private JPanel createInputPanel(String labelText, String icon, JTextField field) {
+    private JPanel createInputPanel(String labelText, JTextField field) {
         JPanel container = new JPanel();
         container.setLayout(new BoxLayout(container, BoxLayout.Y_AXIS));
         container.setOpaque(false);
         container.setAlignmentX(Component.CENTER_ALIGNMENT);
-        container.setMaximumSize(new Dimension(320, 80));
+        container.setMaximumSize(new Dimension(300, 72));
 
         JLabel label = new JLabel(labelText);
-        label.setFont(new Font("Inter", Font.PLAIN, 13));
+        label.setFont(FONT_SMALL);
         label.setForeground(TEXT_PRIMARY);
         label.setAlignmentX(Component.LEFT_ALIGNMENT);
 
@@ -213,46 +166,37 @@ public class LoginPanel extends JPanel {
                 super.paintComponent(g);
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(INPUT_BG);
-                g2.fill(new RoundRectangle2D.Double(0, 0, getWidth(), getHeight(), 12, 12));
-                g2.setColor(BORDER_COLOR);
-                g2.draw(new RoundRectangle2D.Double(0, 0, getWidth() - 1, getHeight() - 1, 12, 12));
+                g2.setColor(BG_TERTIARY);
+                g2.fill(new RoundRectangle2D.Double(0, 0, getWidth(), getHeight(), 8, 8));
+                g2.setColor(BORDER_SUBTLE);
+                g2.draw(new RoundRectangle2D.Double(0, 0, getWidth() - 1, getHeight() - 1, 8, 8));
                 g2.dispose();
             }
         };
         fieldPanel.setLayout(new BorderLayout());
         fieldPanel.setOpaque(false);
-        fieldPanel.setPreferredSize(new Dimension(320, 48));
-        fieldPanel.setMaximumSize(new Dimension(320, 48));
+        fieldPanel.setPreferredSize(new Dimension(300, 44));
+        fieldPanel.setMaximumSize(new Dimension(300, 44));
         fieldPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        // Icon
-        JLabel iconLabel = new JLabel(icon);
-        iconLabel.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 16));
-        iconLabel.setBorder(new EmptyBorder(0, 15, 0, 10));
-
-        field.setFont(new Font("Inter", Font.PLAIN, 14));
+        field.setFont(FONT_BODY);
         field.setForeground(TEXT_PRIMARY);
         field.setCaretColor(TEXT_PRIMARY);
-        field.setBackground(INPUT_BG);
-        field.setBorder(new EmptyBorder(0, 0, 0, 15));
+        field.setBackground(BG_TERTIARY);
+        field.setBorder(new EmptyBorder(0, 16, 0, 16));
         field.setOpaque(false);
 
-        // Add focus effect
         field.addFocusListener(new FocusAdapter() {
-            @Override
             public void focusGained(FocusEvent e) {
-                fieldPanel.setBorder(BorderFactory.createLineBorder(ACCENT_PURPLE, 2));
+                fieldPanel.setBorder(BorderFactory.createLineBorder(ACCENT, 1));
                 fieldPanel.repaint();
             }
-            @Override
             public void focusLost(FocusEvent e) {
                 fieldPanel.setBorder(null);
                 fieldPanel.repaint();
             }
         });
 
-        fieldPanel.add(iconLabel, BorderLayout.WEST);
         fieldPanel.add(field, BorderLayout.CENTER);
 
         container.add(label);
@@ -268,38 +212,20 @@ public class LoginPanel extends JPanel {
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
-                GradientPaint gradient = new GradientPaint(
-                        0, 0, ACCENT_PURPLE,
-                        getWidth(), 0, ACCENT_BLUE
-                );
-                g2.setPaint(gradient);
-                g2.fill(new RoundRectangle2D.Double(0, 0, getWidth(), getHeight(), 12, 12));
+                g2.setColor(getModel().isRollover() ? ACCENT_HOVER : ACCENT);
+                g2.fill(new RoundRectangle2D.Double(0, 0, getWidth(), getHeight(), 8, 8));
                 g2.dispose();
-
                 super.paintComponent(g);
             }
         };
-        button.setFont(new Font("Inter", Font.BOLD, 15));
-        button.setForeground(Color.WHITE);
-        button.setPreferredSize(new Dimension(320, 48));
-        button.setMaximumSize(new Dimension(320, 48));
+        button.setFont(FONT_BUTTON);
+        button.setForeground(BG_PRIMARY);
+        button.setPreferredSize(new Dimension(300, 44));
+        button.setMaximumSize(new Dimension(300, 44));
         button.setContentAreaFilled(false);
         button.setBorderPainted(false);
         button.setFocusPainted(false);
         button.setCursor(new Cursor(Cursor.HAND_CURSOR));
-
-        button.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseEntered(MouseEvent e) {
-                button.setFont(new Font("Inter", Font.BOLD, 16));
-            }
-            @Override
-            public void mouseExited(MouseEvent e) {
-                button.setFont(new Font("Inter", Font.BOLD, 15));
-            }
-        });
-
         return button;
     }
 
@@ -309,73 +235,59 @@ public class LoginPanel extends JPanel {
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(INPUT_BG);
-                g2.fill(new RoundRectangle2D.Double(0, 0, getWidth(), getHeight(), 12, 12));
-                g2.setColor(BORDER_COLOR);
-                g2.draw(new RoundRectangle2D.Double(0, 0, getWidth() - 1, getHeight() - 1, 12, 12));
+                g2.setColor(getModel().isRollover() ? BG_TERTIARY : BG_SECONDARY);
+                g2.fill(new RoundRectangle2D.Double(0, 0, getWidth(), getHeight(), 8, 8));
+                g2.setColor(BORDER_SUBTLE);
+                g2.draw(new RoundRectangle2D.Double(0, 0, getWidth() - 1, getHeight() - 1, 8, 8));
                 g2.dispose();
                 super.paintComponent(g);
             }
         };
-        button.setFont(new Font("Inter", Font.PLAIN, 14));
+        button.setFont(FONT_BUTTON);
         button.setForeground(TEXT_PRIMARY);
-        button.setPreferredSize(new Dimension(320, 44));
-        button.setMaximumSize(new Dimension(320, 44));
+        button.setPreferredSize(new Dimension(300, 44));
+        button.setMaximumSize(new Dimension(300, 44));
         button.setContentAreaFilled(false);
         button.setBorderPainted(false);
         button.setFocusPainted(false);
         button.setCursor(new Cursor(Cursor.HAND_CURSOR));
-
-        button.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseEntered(MouseEvent e) {
-                button.setForeground(ACCENT_PURPLE);
-            }
-            @Override
-            public void mouseExited(MouseEvent e) {
-                button.setForeground(TEXT_PRIMARY);
-            }
-        });
-
         return button;
     }
 
     private JPanel createDivider() {
-        JPanel panel = new JPanel(new BorderLayout(15, 0));
+        JPanel panel = new JPanel(new BorderLayout(12, 0));
         panel.setOpaque(false);
-        panel.setMaximumSize(new Dimension(320, 20));
+        panel.setMaximumSize(new Dimension(300, 20));
 
         JPanel leftLine = new JPanel() {
             @Override
             protected void paintComponent(Graphics g) {
                 super.paintComponent(g);
-                g.setColor(BORDER_COLOR);
+                g.setColor(BORDER_SUBTLE);
                 g.fillRect(0, getHeight() / 2, getWidth(), 1);
             }
         };
         leftLine.setOpaque(false);
+        leftLine.setPreferredSize(new Dimension(120, 20));
 
         JPanel rightLine = new JPanel() {
             @Override
             protected void paintComponent(Graphics g) {
                 super.paintComponent(g);
-                g.setColor(BORDER_COLOR);
+                g.setColor(BORDER_SUBTLE);
                 g.fillRect(0, getHeight() / 2, getWidth(), 1);
             }
         };
         rightLine.setOpaque(false);
+        rightLine.setPreferredSize(new Dimension(120, 20));
 
         JLabel orLabel = new JLabel("or");
-        orLabel.setFont(new Font("Inter", Font.PLAIN, 12));
+        orLabel.setFont(FONT_SMALL);
         orLabel.setForeground(TEXT_SECONDARY);
 
         panel.add(leftLine, BorderLayout.WEST);
         panel.add(orLabel, BorderLayout.CENTER);
         panel.add(rightLine, BorderLayout.EAST);
-
-        // Make lines expand
-        leftLine.setPreferredSize(new Dimension(130, 20));
-        rightLine.setPreferredSize(new Dimension(130, 20));
 
         return panel;
     }
@@ -397,7 +309,6 @@ public class LoginPanel extends JPanel {
             return;
         }
 
-        // Show loading state
         loginButton.setText("Signing in...");
         loginButton.setEnabled(false);
 
@@ -410,14 +321,11 @@ public class LoginPanel extends JPanel {
             @Override
             protected void done() {
                 try {
-                    boolean success = get();
-                    if (!success) {
-                        showError("Invalid username or password");
-                    }
+                    if (!get()) showError("Invalid username or password");
                 } catch (Exception ex) {
                     showError("Login failed: " + ex.getMessage());
                 }
-                loginButton.setText("Sign In");
+                loginButton.setText("Sign in");
                 loginButton.setEnabled(true);
             }
         };
@@ -427,86 +335,57 @@ public class LoginPanel extends JPanel {
     private void continueAsGuest() {
         guestButton.setText("Loading...");
         guestButton.setEnabled(false);
-
-        SwingWorker<Boolean, Void> worker = new SwingWorker<>() {
-            @Override
-            protected Boolean doInBackground() {
-                return parent.performLogin("guest", "guest");
-            }
-
-            @Override
-            protected void done() {
-                try {
-                    boolean success = get();
-                    if (!success) {
-                        showError("Guest access is currently unavailable");
-                    }
-                } catch (Exception ex) {
-                    showError("Connection failed");
-                }
-                guestButton.setText("Continue as Guest");
-                guestButton.setEnabled(true);
-            }
-        };
-        worker.execute();
+        parent.showPage(VideoPlayerUI.PAGE_SEARCH);
     }
 
     private void showError(String message) {
-        // Create a styled error dialog
-        JDialog errorDialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), true);
-        errorDialog.setUndecorated(true);
-        errorDialog.setBackground(new Color(0, 0, 0, 0));
+        JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), true);
+        dialog.setUndecorated(true);
+        dialog.setBackground(new Color(0, 0, 0, 0));
 
         JPanel panel = new JPanel() {
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(CARD_BG);
-                g2.fill(new RoundRectangle2D.Double(0, 0, getWidth(), getHeight(), 16, 16));
+                g2.setColor(BG_SECONDARY);
+                g2.fill(new RoundRectangle2D.Double(0, 0, getWidth(), getHeight(), 12, 12));
                 g2.setColor(ERROR_RED);
-                g2.setStroke(new BasicStroke(2));
-                g2.draw(new RoundRectangle2D.Double(1, 1, getWidth() - 2, getHeight() - 2, 16, 16));
+                g2.setStroke(new BasicStroke(1));
+                g2.draw(new RoundRectangle2D.Double(0, 0, getWidth() - 1, getHeight() - 1, 12, 12));
                 g2.dispose();
             }
         };
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
-        panel.setBorder(new EmptyBorder(20, 30, 20, 30));
+        panel.setBorder(new EmptyBorder(24, 32, 24, 32));
         panel.setOpaque(false);
 
-        JLabel iconLabel = new JLabel("⚠️");
-        iconLabel.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 32));
-        iconLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-
-        JLabel messageLabel = new JLabel("<html><center>" + message + "</center></html>");
-        messageLabel.setFont(new Font("Inter", Font.PLAIN, 14));
+        JLabel messageLabel = new JLabel(message);
+        messageLabel.setFont(FONT_BODY);
         messageLabel.setForeground(TEXT_PRIMARY);
         messageLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
 
         JButton okButton = new JButton("OK");
-        okButton.setFont(new Font("Inter", Font.BOLD, 13));
-        okButton.setForeground(Color.WHITE);
-        okButton.setBackground(ERROR_RED);
+        okButton.setFont(FONT_BUTTON);
+        okButton.setForeground(TEXT_PRIMARY);
+        okButton.setBackground(BG_TERTIARY);
         okButton.setPreferredSize(new Dimension(80, 32));
-        okButton.setBorder(BorderFactory.createEmptyBorder(5, 20, 5, 20));
+        okButton.setBorder(BorderFactory.createLineBorder(BORDER_SUBTLE));
         okButton.setFocusPainted(false);
         okButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
         okButton.setAlignmentX(Component.CENTER_ALIGNMENT);
-        okButton.addActionListener(e -> errorDialog.dispose());
+        okButton.addActionListener(e -> dialog.dispose());
 
-        panel.add(iconLabel);
-        panel.add(Box.createVerticalStrut(10));
         panel.add(messageLabel);
-        panel.add(Box.createVerticalStrut(15));
+        panel.add(Box.createVerticalStrut(20));
         panel.add(okButton);
 
-        errorDialog.add(panel);
-        errorDialog.pack();
-        errorDialog.setLocationRelativeTo(this);
-        errorDialog.setVisible(true);
+        dialog.add(panel);
+        dialog.pack();
+        dialog.setLocationRelativeTo(this);
+        dialog.setVisible(true);
     }
 
-    // Method to clear fields when panel is shown
     public void clearFields() {
         usernameField.setText("");
         passwordField.setText("");
