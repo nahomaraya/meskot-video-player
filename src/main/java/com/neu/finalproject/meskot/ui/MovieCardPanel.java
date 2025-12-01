@@ -2,17 +2,21 @@ package com.neu.finalproject.meskot.ui;
 
 import com.neu.finalproject.meskot.dto.MovieDto;
 
+import javax.imageio.ImageIO;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.geom.RoundRectangle2D;
-import java.time.format.DateTimeFormatter;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.net.URL;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * YouTube-style movie card component
+ * YouTube-style movie card component with thumbnail support
  */
 public class MovieCardPanel extends JPanel {
 
@@ -24,9 +28,15 @@ public class MovieCardPanel extends JPanel {
     private static final Color TEXT_SECONDARY = new Color(156, 156, 156);
     private static final Color ACCENT = new Color(255, 136, 0);
 
+    // Thumbnail cache to avoid reloading images
+    private static final ConcurrentHashMap<String, Image> thumbnailCache = new ConcurrentHashMap<>();
+
     private final MovieDto movie;
     private boolean isHovered = false;
     private boolean isSelected = false;
+    private Image thumbnail = null;
+    private boolean thumbnailLoading = false;
+    private boolean thumbnailFailed = false;
 
     public static final int CARD_WIDTH = 240;
     public static final int CARD_HEIGHT = 220;
@@ -41,6 +51,74 @@ public class MovieCardPanel extends JPanel {
         setOpaque(false);
         setCursor(new Cursor(Cursor.HAND_CURSOR));
         setupMouseListeners();
+
+        // Load thumbnail asynchronously
+        loadThumbnail();
+    }
+
+    private void loadThumbnail() {
+        String thumbnailUrl = movie.getThumbnailUrl();
+
+        if (thumbnailUrl == null || thumbnailUrl.isEmpty()) {
+            thumbnailFailed = true;
+            return;
+        }
+
+        // Check cache first
+        if (thumbnailCache.containsKey(thumbnailUrl)) {
+            thumbnail = thumbnailCache.get(thumbnailUrl);
+            return;
+        }
+
+        thumbnailLoading = true;
+
+        // Load in background thread
+        SwingWorker<Image, Void> loader = new SwingWorker<>() {
+            @Override
+            protected Image doInBackground() throws Exception {
+                try {
+                    URL url = new URL(thumbnailUrl);
+                    BufferedImage img = ImageIO.read(url);
+                    if (img != null) {
+                        // Scale to fit thumbnail area while maintaining aspect ratio
+                        int targetWidth = CARD_WIDTH - 8;
+                        int targetHeight = THUMBNAIL_HEIGHT;
+
+                        double scale = Math.max(
+                                (double) targetWidth / img.getWidth(),
+                                (double) targetHeight / img.getHeight()
+                        );
+
+                        int scaledWidth = (int) (img.getWidth() * scale);
+                        int scaledHeight = (int) (img.getHeight() * scale);
+
+                        Image scaled = img.getScaledInstance(scaledWidth, scaledHeight, Image.SCALE_SMOOTH);
+                        return scaled;
+                    }
+                } catch (IOException e) {
+                    System.err.println("Failed to load thumbnail: " + thumbnailUrl + " - " + e.getMessage());
+                }
+                return null;
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    Image result = get();
+                    if (result != null) {
+                        thumbnail = result;
+                        thumbnailCache.put(thumbnailUrl, result);
+                    } else {
+                        thumbnailFailed = true;
+                    }
+                } catch (Exception e) {
+                    thumbnailFailed = true;
+                }
+                thumbnailLoading = false;
+                repaint();
+            }
+        };
+        loader.execute();
     }
 
     private void setupMouseListeners() {
@@ -78,29 +156,59 @@ public class MovieCardPanel extends JPanel {
         Graphics2D g2 = (Graphics2D) g.create();
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_LCD_HRGB);
+        g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
 
         int w = getWidth();
         int h = getHeight();
         int padding = 4;
+        int thumbWidth = w - padding * 2;
 
-        // Draw thumbnail background with rounded top corners
+        // Create clipping shape for rounded thumbnail
+        Shape thumbnailClip = new RoundRectangle2D.Float(padding, padding, thumbWidth, THUMBNAIL_HEIGHT, CORNER_RADIUS, CORNER_RADIUS);
+
+        // Draw thumbnail background
         g2.setColor(BG_THUMBNAIL);
-        g2.fill(new RoundRectangle2D.Float(padding, padding, w - padding * 2, THUMBNAIL_HEIGHT, CORNER_RADIUS, CORNER_RADIUS));
+        g2.fill(thumbnailClip);
 
-        // Draw movie icon in thumbnail area
-        g2.setColor(new Color(70, 70, 70));
-        g2.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 48));
-        FontMetrics fmIcon = g2.getFontMetrics();
-        String icon = "🎬";
-        int iconX = (w - fmIcon.stringWidth(icon)) / 2;
-        int iconY = padding + THUMBNAIL_HEIGHT / 2 + 18;
-        g2.drawString(icon, iconX, iconY);
+        // Draw thumbnail image or placeholder
+        if (thumbnail != null) {
+            // Clip to rounded rectangle
+            Shape oldClip = g2.getClip();
+            g2.setClip(thumbnailClip);
+
+            // Center the image in the thumbnail area
+            int imgW = thumbnail.getWidth(null);
+            int imgH = thumbnail.getHeight(null);
+            int imgX = padding + (thumbWidth - imgW) / 2;
+            int imgY = padding + (THUMBNAIL_HEIGHT - imgH) / 2;
+
+            g2.drawImage(thumbnail, imgX, imgY, null);
+            g2.setClip(oldClip);
+        } else if (thumbnailLoading) {
+            // Show loading indicator
+            g2.setColor(new Color(70, 70, 70));
+            g2.setFont(new Font("Inter", Font.PLAIN, 12));
+            String loadingText = "Loading...";
+            FontMetrics fm = g2.getFontMetrics();
+            int textX = padding + (thumbWidth - fm.stringWidth(loadingText)) / 2;
+            int textY = padding + THUMBNAIL_HEIGHT / 2 + 5;
+            g2.drawString(loadingText, textX, textY);
+        } else {
+            // Show placeholder icon
+            g2.setColor(new Color(70, 70, 70));
+            g2.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 48));
+            FontMetrics fmIcon = g2.getFontMetrics();
+            String icon = "🎬";
+            int iconX = padding + (thumbWidth - fmIcon.stringWidth(icon)) / 2;
+            int iconY = padding + THUMBNAIL_HEIGHT / 2 + 18;
+            g2.drawString(icon, iconX, iconY);
+        }
 
         // Hover overlay with play button
         if (isHovered) {
             // Dark overlay
             g2.setColor(new Color(0, 0, 0, 150));
-            g2.fill(new RoundRectangle2D.Float(padding, padding, w - padding * 2, THUMBNAIL_HEIGHT, CORNER_RADIUS, CORNER_RADIUS));
+            g2.fill(thumbnailClip);
 
             // Play button circle
             int playSize = 56;
@@ -118,18 +226,20 @@ public class MovieCardPanel extends JPanel {
         }
 
         // Duration badge (bottom-right of thumbnail)
-        String duration = "1:30:00"; // Replace with actual duration if available
-        g2.setFont(new Font("Inter", Font.BOLD, 11));
-        FontMetrics fmDur = g2.getFontMetrics();
-        int durW = fmDur.stringWidth(duration) + 8;
-        int durH = 18;
-        int durX = w - padding - durW - 6;
-        int durY = padding + THUMBNAIL_HEIGHT - durH - 6;
+        String duration = formatDuration(movie.getDurationMinutes());
+        if (duration != null) {
+            g2.setFont(new Font("Inter", Font.BOLD, 11));
+            FontMetrics fmDur = g2.getFontMetrics();
+            int durW = fmDur.stringWidth(duration) + 8;
+            int durH = 18;
+            int durX = w - padding - durW - 6;
+            int durY = padding + THUMBNAIL_HEIGHT - durH - 6;
 
-        g2.setColor(new Color(0, 0, 0, 200));
-        g2.fillRoundRect(durX, durY, durW, durH, 4, 4);
-        g2.setColor(Color.WHITE);
-        g2.drawString(duration, durX + 4, durY + 13);
+            g2.setColor(new Color(0, 0, 0, 200));
+            g2.fillRoundRect(durX, durY, durW, durH, 4, 4);
+            g2.setColor(Color.WHITE);
+            g2.drawString(duration, durX + 4, durY + 13);
+        }
 
         // Resolution badge (top-left of thumbnail)
         String resolution = movie.getResolution();
@@ -185,6 +295,22 @@ public class MovieCardPanel extends JPanel {
         g2.dispose();
     }
 
+    private String formatDuration(Integer durationSeconds) {
+        if (durationSeconds == null || durationSeconds <= 0) {
+            return null; // Don't show badge if no duration
+        }
+
+        int hours = durationSeconds / 3600;
+        int minutes = (durationSeconds % 3600) / 60;
+        int seconds = durationSeconds % 60;
+
+        if (hours > 0) {
+            return String.format("%d:%02d:%02d", hours, minutes, seconds);
+        } else {
+            return String.format("%d:%02d", minutes, seconds);
+        }
+    }
+
     private void drawWrappedText(Graphics2D g2, String text, int x, int y, int maxWidth, int maxLines) {
         FontMetrics fm = g2.getFontMetrics();
         String[] words = text.split(" ");
@@ -238,5 +364,19 @@ public class MovieCardPanel extends JPanel {
         if (days < 30) return (days / 7) + " week" + (days / 7 > 1 ? "s" : "") + " ago";
         if (days < 365) return (days / 30) + " month" + (days / 30 > 1 ? "s" : "") + " ago";
         return (days / 365) + " year" + (days / 365 > 1 ? "s" : "") + " ago";
+    }
+
+    /**
+     * Clear the thumbnail cache (useful when refreshing the library)
+     */
+    public static void clearThumbnailCache() {
+        thumbnailCache.clear();
+    }
+
+    /**
+     * Get the number of cached thumbnails
+     */
+    public static int getCacheSize() {
+        return thumbnailCache.size();
     }
 }
