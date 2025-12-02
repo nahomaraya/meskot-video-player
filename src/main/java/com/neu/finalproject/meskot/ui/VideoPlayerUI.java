@@ -53,7 +53,7 @@ public class VideoPlayerUI extends JFrame {
     private static final Font FONT_HEADING = new Font(FONT_FAMILY, Font.PLAIN, 18);
     private static final Font FONT_BODY = new Font(FONT_FAMILY, Font.PLAIN, 14);
     private static final Font FONT_SMALL = new Font(FONT_FAMILY, Font.PLAIN, 12);
-    private static final Font FONT_BUTTON = new Font(FONT_FAMILY, Font.PLAIN, 14);
+    private static final Font FONT_BUTTON = new Font(FONT_FAMILY, Font.BOLD, 14);
 
     private final EmbeddedMediaPlayerComponent mediaPlayerComponent;
     private final JList<MovieDto> playerMovieListUI;
@@ -674,9 +674,32 @@ public class VideoPlayerUI extends JFrame {
 
         GridBagConstraints gbc = new GridBagConstraints();
 
-        JLabel title = new JLabel("Welcome to Meskot!");
-        title.setFont(FONT_TITLE);
-        title.setForeground(TEXT_PRIMARY);
+        JPanel titlePanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
+        titlePanel.setOpaque(false);
+
+// Load and scale the logo
+        ImageIcon originalIcon = new ImageIcon(getClass().getResource("/logo.png"));
+        int logoHeight = 360; // Adjust this to match your font size
+        int logoWidth = (int) ((double) originalIcon.getIconWidth() / originalIcon.getIconHeight() * logoHeight);
+        Image scaledImage = originalIcon.getImage().getScaledInstance(logoWidth, logoHeight, Image.SCALE_SMOOTH);
+        ImageIcon scaledIcon = new ImageIcon(scaledImage);
+
+//        JLabel welcomeLabel = new JLabel("Welcome to ");
+//        welcomeLabel.setFont(FONT_TITLE);
+//        welcomeLabel.setForeground(TEXT_PRIMARY);
+
+        JLabel logoLabel = new JLabel(scaledIcon);
+
+        JLabel exclamationLabel = new JLabel("!");
+        exclamationLabel.setFont(FONT_TITLE);
+        exclamationLabel.setForeground(TEXT_PRIMARY);
+
+//        titlePanel.add(welcomeLabel);
+        titlePanel.add(logoLabel);
+        titlePanel.add(exclamationLabel);
+//        JLabel title = new JLabel("Welcome to Meskot!");
+//        title.setFont(FONT_TITLE);
+//        title.setForeground(TEXT_PRIMARY);
 
 //        JLabel subtitle = new JLabel("Video Player");
 //        subtitle.setFont(FONT_BODY);
@@ -693,14 +716,14 @@ public class VideoPlayerUI extends JFrame {
                 BorderFactory.createEmptyBorder(12, 20, 12, 20)
         ));
 
-        JButton searchButton = createPrimaryButton("Search");
+        JButton searchButton = createPrimaryButton("SEARCH");
         JButton libraryButton = createSecondaryButton("Library");
         JButton uploadButton = createSecondaryButton("Upload");
 
         gbc.gridwidth = 2;
         gbc.insets = new Insets(0, 0, 4, 0);
         gbc.gridy = 0;
-        page.add(title, gbc);
+        page.add(titlePanel, gbc);
 
 //        gbc.gridy = 1;
 //        gbc.insets = new Insets(0, 0, 40, 0);

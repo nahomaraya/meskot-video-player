@@ -20,6 +20,7 @@ data/
 *.iml
 *.ipr
 *.zst
+*.jar
 
 ### NetBeans ###
 /nbproject/private/
