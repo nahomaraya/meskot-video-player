@@ -1,0 +1,67 @@
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    keycloak_id VARCHAR(255),
+    username VARCHAR(255),
+    email VARCHAR(255),
+    role VARCHAR(50),
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE movies (
+    id SERIAL PRIMARY KEY,
+    title VARCHAR(255),
+    description TEXT,
+    thumbnail_url TEXT,
+    status VARCHAR(50),
+    created_at TIMESTAMP DEFAULT NOW(),
+    uploader_id BIGINT REFERENCES users(id)
+);
+
+CREATE TABLE movie_metadata (
+    id SERIAL PRIMARY KEY,
+    movie_id BIGINT REFERENCES movies(id),
+    resolution VARCHAR(50),
+    format VARCHAR(50),
+    codec VARCHAR(50),
+    compression_algorithm VARCHAR(50),
+    file_path TEXT,
+    size BIGINT,
+    duration DOUBLE PRECISION,
+    bitrate INTEGER,
+    upload_date TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE movie_chunks (
+    id SERIAL PRIMARY KEY,
+    metadata_id BIGINT REFERENCES movie_metadata(id),
+    chunk_index INTEGER,
+    chunk_path TEXT,
+    size BIGINT,
+    checksum VARCHAR(255)
+);
+
+CREATE TABLE upload_sessions (
+    id UUID PRIMARY KEY,
+    status VARCHAR(50),
+    progress DOUBLE PRECISION,
+    started_at TIMESTAMP DEFAULT NOW(),
+    completed_at TIMESTAMP,
+    user_id BIGINT REFERENCES users(id),
+    movie_id BIGINT REFERENCES movies(id)
+);
+
+CREATE TABLE cache_entries (
+    id SERIAL PRIMARY KEY,
+    metadata_id BIGINT REFERENCES movie_metadata(id),
+    cache_key VARCHAR(255),
+    created_at TIMESTAMP DEFAULT NOW(),
+    expires_at TIMESTAMP
+);
+
+CREATE TABLE playback_history (
+    id SERIAL PRIMARY KEY,
+    user_id BIGINT REFERENCES users(id),
+    movie_id BIGINT REFERENCES movies(id),
+    position DOUBLE PRECISION,
+    watched_at TIMESTAMP DEFAULT NOW()
+);
