@@ -441,11 +441,20 @@ public class VideoPlayerUI extends JFrame {
 
         JMenuItem accountItem = createMenuItem("My Account");
         JMenuItem settingsItem = createMenuItem("Settings");
+        JMenuItem adminPanelItem = createMenuItem("Admin Panel");
         JMenuItem loginLogoutItem = createMenuItem("Sign In");
 
         accountItem.addActionListener(e -> {
             if (!isLoggedIn) showLoginRequired("view account details");
             else showAccountDialog();
+        });
+
+        adminPanelItem.addActionListener(e -> {
+            if (!isLoggedIn) {
+                showLoginRequired("access admin panel");
+            } else {
+                openAdminPanel();
+            }
         });
 
         loginLogoutItem.addActionListener(e -> {
@@ -455,6 +464,7 @@ public class VideoPlayerUI extends JFrame {
 
         menu.add(accountItem);
         menu.add(settingsItem);
+        menu.add(adminPanelItem);
         menu.addSeparator();
         menu.add(loginLogoutItem);
 
@@ -1147,10 +1157,12 @@ public class VideoPlayerUI extends JFrame {
                 isLoggedIn = true;
                 updateProfileButton();
                 showPage(PAGE_SEARCH);
+                System.out.println("Login successful for user: " + currentUser);
                 return true;
             }
-        } catch (IOException ex) {
+        } catch (Exception ex) {
             showErrorMessage("Login failed: " + ex.getMessage());
+            System.err.println("Login error: " + ex.getMessage());
         }
         return false;
     }
@@ -1167,8 +1179,10 @@ public class VideoPlayerUI extends JFrame {
             return conn.getResponseCode() == 201;
         } catch (IOException ex) {
             showErrorMessage("Registration failed: " + ex.getMessage());
+            System.err.println("Registration error: " + ex.getMessage());
             return false;
         }
+
     }
 
     public void showLoginPanel() { mainCardLayout.show(mainPanel, "LOGIN"); }
@@ -1185,5 +1199,16 @@ public class VideoPlayerUI extends JFrame {
         isLoggedIn = false;
         updateProfileButton();
         showLoginPanel();
+    }
+
+    /**
+     * Open Admin Panel in a new window
+     * Only accessible after login
+     */
+    private void openAdminPanel() {
+        SwingUtilities.invokeLater(() -> {
+            AdminPanel adminPanel = new AdminPanel();
+            adminPanel.setVisible(true);
+        });
     }
 }
