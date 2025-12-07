@@ -11,11 +11,7 @@
 
 # Class Diagram
 <div align="center">
-  <img 
-    src="https://github.com/user-attachments/assets/a2c623cd-ab0c-48c2-9b35-784b08a1bbd4"
-    alt="Class Diagram"
-    width="700"
-  />
+<img width="1257" height="1484" alt="package drawio" src="https://github.com/user-attachments/assets/835bcae4-df39-4832-96cb-32e8d52d28e1" />
 </div>
 
 ---
