@@ -1,26 +1,6 @@
-# Use Case Diagram
-<div align="center">
-  <img 
-    src="https://github.com/user-attachments/assets/78329cf0-03f1-4ac6-859c-6f79b981e558"
-    alt="Use Case Diagram"
-    width="700"
-  />
-</div>
+A full-stack, enterprise-grade media platform designed to manage, moderate, and distribute video content from multiple sources. The system supports both original creator uploads and public-domain imports (via the Internet Archive), with role-based access control and production-ready architecture. Made using Spring Boot and Java Swing UI.
 
----
-
-# Class Diagram
-<div align="center">
-<img width="1257" height="1484" alt="package drawio" src="https://github.com/user-attachments/assets/835bcae4-df39-4832-96cb-32e8d52d28e1" />
-</div>
-
----
-
-# System Architecture
-<div align="center">
-  <img 
-    src="https://github.com/user-attachments/assets/211ebc07-02db-4a3d-b12d-e82774c8a960"
-    alt="System Architecture"
-    width="700"
-  />
-</div>
+Key Innovations:
+HTTP 206 partial content streaming for video seeking
+On-the-fly transcoding using JavaCV / FFmpeg (H.264 / H.265 for conversion and download optimization
+Real-time job progress tracking for long-running tasks
