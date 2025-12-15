@@ -3,7 +3,7 @@
 
 A full-stack, enterprise-grade media platform designed to manage, moderate, and distribute video content from multiple sources. The system supports both original creator uploads and public-domain content imports via the Internet Archive, with role-based access control and a production-ready architecture. The application is built using Spring Boot for the backend and a Java Swing desktop client for the user interface.
 
-✨ Key Features & Innovations
+✨ ## Key Features & Innovations
 
 HTTP 206 Partial Content Streaming
 Enables efficient video seeking and resumable playback for large media files.
