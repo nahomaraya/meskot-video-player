@@ -15,7 +15,7 @@ public class MeskotApplication {
 
         System.setProperty("java.awt.headless", "false");
         SpringApplication.run(MeskotApplication.class, args);
-        System.setProperty("VLC_PLUGIN_PATH", "C:\\Program Files\\VideoLAN\\VLC\\plugins");
+        //set the vlc path f
         SwingUtilities.invokeLater(() -> {
 
             // 1. Create the service (data/network layer)

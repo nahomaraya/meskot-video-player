@@ -8,9 +8,9 @@ import java.util.Map;
 
 public class AdminDatabaseService {
     // Supabase connection with pooler format
-    private static final String DB_URL = "jdbc:postgresql://aws-0-us-west-2.pooler.supabase.com:5432/postgres";
-    private static final String USER = "postgres.sykcyulhobvhsrssxldd";
-    private static final String PASSWORD = "YqTRixflrMN9HeM1";
+    private static final String DB_URL = "";
+    private static final String USER = "";
+    private static final String PASSWORD = "";
 
     private static Connection connection = null;
 
